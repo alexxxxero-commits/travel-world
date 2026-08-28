@@ -5,28 +5,50 @@ import { supabase } from "@/lib/supabase";
 
 type Place = {
   id: string;
+  user_id: string | null;
   city: string;
   country: string;
+  latitude: number | null;
+  longtitude: number | null;
+  description: string | null;
 };
 
 export default function AddMemory() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [placeId, setPlaceId] = useState("");
+
+  const [showNewPlace, setShowNewPlace] = useState(false);
+
+  const [newCity, setNewCity] = useState("");
+  const [newCountry, setNewCountry] = useState("");
+  const [newLatitude, setNewLatitude] = useState("");
+  const [newLongitude, setNewLongitude] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [creatingPlace, setCreatingPlace] = useState(false);
+
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
+
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  // ==========================================
+  // LOAD PLACES
+  // ==========================================
 
   useEffect(() => {
     async function loadPlaces() {
       const { data, error } = await supabase
         .from("places")
-        .select("id, city, country")
+        .select(
+          "id, user_id, city, country, latitude, longtitude, description"
+        )
         .order("city");
 
       if (error) {
         console.error("LOAD PLACES ERROR:", error);
+        setMessage(`Could not load places: ${error.message}`);
         return;
       }
 
@@ -35,6 +57,93 @@ export default function AddMemory() {
 
     loadPlaces();
   }, []);
+
+  // ==========================================
+  // CREATE NEW PLACE
+  // ==========================================
+
+  async function createPlace() {
+    if (!newCity.trim() || !newCountry.trim()) {
+      setMessage("Please enter at least a city and country.");
+      return;
+    }
+
+    setCreatingPlace(true);
+    setMessage("");
+
+    const latitude =
+      newLatitude.trim() === ""
+        ? null
+        : Number(newLatitude);
+
+    const longtitude =
+      newLongitude.trim() === ""
+        ? null
+        : Number(newLongitude);
+
+    if (
+      (latitude !== null && Number.isNaN(latitude)) ||
+      (longtitude !== null && Number.isNaN(longtitude))
+    ) {
+      setMessage("Latitude and longitude must be numbers.");
+      setCreatingPlace(false);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("places")
+      .insert({
+        user_id: null,
+        city: newCity.trim(),
+        country: newCountry.trim(),
+        latitude,
+        longtitude,
+        description: newDescription.trim() || null,
+      })
+      .select()
+      .single();
+
+    if (error || !data) {
+      console.error("CREATE PLACE ERROR:", error);
+
+      setMessage(
+        `Place could not be created: ${
+          error?.message ?? "Unknown error"
+        }`
+      );
+
+      setCreatingPlace(false);
+      return;
+    }
+
+    // Add the new place to the dropdown
+    setPlaces((current) =>
+      [...current, data].sort((a, b) =>
+        a.city.localeCompare(b.city)
+      )
+    );
+
+    // Automatically select the new place
+    setPlaceId(data.id);
+
+    // Reset new-place form
+    setNewCity("");
+    setNewCountry("");
+    setNewLatitude("");
+    setNewLongitude("");
+    setNewDescription("");
+
+    setShowNewPlace(false);
+    setCreatingPlace(false);
+
+    setMessage(
+      `Place created ✨ ${data.city}, ${data.country}`
+    );
+  }
+
+  // ==========================================
+  // SAVE MEMORY
+  // ==========================================
 
   async function saveMemory() {
     if (!placeId || !title.trim() || !content.trim()) {
@@ -45,11 +154,9 @@ export default function AddMemory() {
     setSaving(true);
     setMessage("");
 
-    /*
-     * ==========================================
-     * 1. CREATE JOURNAL
-     * ==========================================
-     */
+    // ==========================================
+    // 1. CREATE JOURNAL
+    // ==========================================
 
     const {
       data: journal,
@@ -65,10 +172,7 @@ export default function AddMemory() {
       .single();
 
     if (journalError || !journal) {
-      console.error(
-        "JOURNAL ERROR:",
-        journalError
-      );
+      console.error("JOURNAL ERROR:", journalError);
 
       setMessage(
         `Journal could not be saved: ${
@@ -80,11 +184,9 @@ export default function AddMemory() {
       return;
     }
 
-    /*
-     * ==========================================
-     * 2. UPLOAD PHOTOS
-     * ==========================================
-     */
+    // ==========================================
+    // 2. UPLOAD PHOTOS
+    // ==========================================
 
     const photoRows: {
       place_id: string;
@@ -93,38 +195,17 @@ export default function AddMemory() {
     }[] = [];
 
     for (const photo of photos) {
-      /*
-       * Generate ONE unique path.
-       *
-       * This exact path is used for:
-       *
-       * Storage upload
-       *        ↓
-       * Public URL
-       *        ↓
-       * photos.url
-       */
-
       const extension =
         photo.name.split(".").pop()?.toLowerCase() ||
         "jpg";
 
-      const uniqueName =
-        `${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2)}.${extension}`;
+      const uniqueName = `${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}.${extension}`;
 
-      const filePath =
-        `journals/${uniqueName}`;
+      const filePath = `journals/${uniqueName}`;
 
-      console.log(
-        "UPLOADING PHOTO:",
-        filePath
-      );
-
-      /*
-       * Upload to Storage
-       */
+      console.log("UPLOADING PHOTO:", filePath);
 
       const {
         data: uploadData,
@@ -151,16 +232,11 @@ export default function AddMemory() {
         return;
       }
 
-      console.log(
-        "UPLOAD SUCCESS:",
-        uploadData
-      );
+      console.log("UPLOAD SUCCESS:", uploadData);
 
-      /*
-       * ==========================================
-       * 3. CREATE PUBLIC URL
-       * ==========================================
-       */
+      // ==========================================
+      // 3. CREATE PUBLIC URL
+      // ==========================================
 
       const {
         data: publicUrlData,
@@ -168,27 +244,15 @@ export default function AddMemory() {
         .from("photos")
         .getPublicUrl(filePath);
 
-      const publicUrl =
-        publicUrlData.publicUrl;
+      const publicUrl = publicUrlData.publicUrl;
 
       console.log(
         "PUBLIC PHOTO URL:",
         publicUrl
       );
 
-      /*
-       * ==========================================
-       * 4. VERIFY THE URL
-       * ==========================================
-       *
-       * We don't want to save a broken URL
-       * into the database.
-       */
-
       if (!publicUrl) {
-        console.error(
-          "PUBLIC URL WAS EMPTY"
-        );
+        console.error("PUBLIC URL WAS EMPTY");
 
         setMessage(
           "Photo uploaded, but the public URL could not be created."
@@ -198,10 +262,9 @@ export default function AddMemory() {
         return;
       }
 
-      /*
-       * Add this photo to the rows
-       * that will be inserted into photos.
-       */
+      // ==========================================
+      // 4. ADD PHOTO RECORD
+      // ==========================================
 
       photoRows.push({
         place_id: placeId,
@@ -210,11 +273,9 @@ export default function AddMemory() {
       });
     }
 
-    /*
-     * ==========================================
-     * 5. SAVE PHOTO RECORDS
-     * ==========================================
-     */
+    // ==========================================
+    // 5. SAVE PHOTO RECORDS
+    // ==========================================
 
     if (photoRows.length > 0) {
       const {
@@ -237,9 +298,7 @@ export default function AddMemory() {
         );
 
         setMessage(
-          `Photos could not be saved: ${
-            photoError.message
-          }`
+          `Photos could not be saved: ${photoError.message}`
         );
 
         setSaving(false);
@@ -252,11 +311,9 @@ export default function AddMemory() {
       );
     }
 
-    /*
-     * ==========================================
-     * 6. SUCCESS
-     * ==========================================
-     */
+    // ==========================================
+    // 6. SUCCESS
+    // ==========================================
 
     setTitle("");
     setContent("");
@@ -273,6 +330,10 @@ export default function AddMemory() {
 
     setSaving(false);
   }
+
+  // ==========================================
+  // UI
+  // ==========================================
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -292,7 +353,9 @@ export default function AddMemory() {
           Save a little piece of your journey.
         </p>
 
-        {/* Place */}
+        {/* ======================================
+            PLACE
+        ====================================== */}
 
         <div className="mt-12">
           <label className="text-sm text-white/60">
@@ -323,9 +386,142 @@ export default function AddMemory() {
               </option>
             ))}
           </select>
+
+          {/* Add new place button */}
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowNewPlace(!showNewPlace);
+              setMessage("");
+            }}
+            className="mt-4 text-sm text-white/50 transition hover:text-white"
+          >
+            {showNewPlace
+              ? "− Cancel new place"
+              : "+ Add a new place"}
+          </button>
         </div>
 
-        {/* Title */}
+        {/* ======================================
+            NEW PLACE FORM
+        ====================================== */}
+
+        {showNewPlace && (
+          <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+
+            <p className="text-sm uppercase tracking-[0.3em] text-white/40">
+              New Place
+            </p>
+
+            {/* City */}
+
+            <div className="mt-6">
+              <label className="text-sm text-white/60">
+                City
+              </label>
+
+              <input
+                value={newCity}
+                onChange={(e) =>
+                  setNewCity(e.target.value)
+                }
+                placeholder="San Pedro de Atacama"
+                className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
+              />
+            </div>
+
+            {/* Country */}
+
+            <div className="mt-5">
+              <label className="text-sm text-white/60">
+                Country
+              </label>
+
+              <input
+                value={newCountry}
+                onChange={(e) =>
+                  setNewCountry(e.target.value)
+                }
+                placeholder="Chile"
+                className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
+              />
+            </div>
+
+            {/* Coordinates */}
+
+            <div className="mt-5 grid grid-cols-2 gap-4">
+
+              <div>
+                <label className="text-sm text-white/60">
+                  Latitude
+                </label>
+
+                <input
+                  value={newLatitude}
+                  onChange={(e) =>
+                    setNewLatitude(e.target.value)
+                  }
+                  placeholder="-22.9087"
+                  inputMode="decimal"
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-white/60">
+                  Longitude
+                </label>
+
+                <input
+                  value={newLongitude}
+                  onChange={(e) =>
+                    setNewLongitude(e.target.value)
+                  }
+                  placeholder="-67.9236"
+                  inputMode="decimal"
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
+                />
+              </div>
+
+            </div>
+
+            {/* Description */}
+
+            <div className="mt-5">
+              <label className="text-sm text-white/60">
+                Description
+              </label>
+
+              <textarea
+                value={newDescription}
+                onChange={(e) =>
+                  setNewDescription(e.target.value)
+                }
+                placeholder="A desert town surrounded by incredible landscapes..."
+                rows={4}
+                className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
+              />
+            </div>
+
+            {/* Create */}
+
+            <button
+              type="button"
+              onClick={createPlace}
+              disabled={creatingPlace}
+              className="mt-6 w-full rounded-full bg-white px-6 py-4 text-sm uppercase tracking-widest text-black transition hover:bg-white/80 disabled:opacity-50"
+            >
+              {creatingPlace
+                ? "Creating..."
+                : "Create Place"}
+            </button>
+          </div>
+        )}
+
+        {/* ======================================
+            TITLE
+        ====================================== */}
 
         <div className="mt-8">
           <label className="text-sm text-white/60">
@@ -342,7 +538,9 @@ export default function AddMemory() {
           />
         </div>
 
-        {/* Content */}
+        {/* ======================================
+            CONTENT
+        ====================================== */}
 
         <div className="mt-8">
           <label className="text-sm text-white/60">
@@ -360,7 +558,9 @@ export default function AddMemory() {
           />
         </div>
 
-        {/* Photos */}
+        {/* ======================================
+            PHOTOS
+        ====================================== */}
 
         <div className="mt-8">
           <label className="text-sm text-white/60">
@@ -397,6 +597,7 @@ export default function AddMemory() {
                 setPhotos(files);
               }}
             />
+
           </label>
 
           {/* Selected photos */}
@@ -438,7 +639,9 @@ export default function AddMemory() {
           )}
         </div>
 
-        {/* Save */}
+        {/* ======================================
+            SAVE
+        ====================================== */}
 
         <button
           onClick={saveMemory}
