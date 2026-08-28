@@ -5,26 +5,26 @@ import { supabase } from "@/lib/supabase";
 
 type Place = {
   id: string;
-  user_id: string | null;
   city: string;
   country: string;
-  latitude: number | null;
-  longitude: number | null;
-  description: string | null;
+  latitude?: number;
+  longitude?: number;
+};
+
+type SearchResult = {
+  city: string;
+  country: string;
+  latitude: number;
+  longitude: number;
 };
 
 export default function AddMemory() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [placeId, setPlaceId] = useState("");
 
-  const [showNewPlace, setShowNewPlace] = useState(false);
-
-  const [newCity, setNewCity] = useState("");
-  const [newCountry, setNewCountry] = useState("");
-  const [newLatitude, setNewLatitude] = useState("");
-  const [newLongitude, setNewLongitude] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [creatingPlace, setCreatingPlace] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
+  const [searchingCity, setSearchingCity] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -34,16 +34,14 @@ export default function AddMemory() {
   const [message, setMessage] = useState("");
 
   // ==========================================
-  // LOAD PLACES
+  // 1. LOAD EXISTING PLACES
   // ==========================================
 
   useEffect(() => {
     async function loadPlaces() {
       const { data, error } = await supabase
         .from("places")
-        .select(
-          "id, user_id, city, country, latitude, longitude, description"
-        )
+        .select("id, city, country, latitude, longitude")
         .order("city");
 
       if (error) {
@@ -59,46 +57,99 @@ export default function AddMemory() {
   }, []);
 
   // ==========================================
-  // CREATE NEW PLACE
+  // 2. SEARCH CITY
   // ==========================================
 
-  async function createPlace() {
-    if (!newCity.trim() || !newCountry.trim()) {
-      setMessage("Please enter at least a city and country.");
-      return;
-    }
+  async function searchCity() {
+    if (!citySearch.trim()) return;
 
-    setCreatingPlace(true);
+    setSearchingCity(true);
+    setSearchResults([]);
     setMessage("");
 
-    const latitude =
-      newLatitude.trim() === ""
-        ? null
-        : Number(newLatitude);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q=${encodeURIComponent(
+          citySearch.trim()
+        )}`
+      );
 
-    const longitude =
-      newLongitude.trim() === ""
-        ? null
-        : Number(newLongitude);
+      if (!response.ok) {
+        throw new Error("City search failed");
+      }
 
-    if (
-      (latitude !== null && Number.isNaN(latitude)) ||
-      (longitude !== null && Number.isNaN(longitude))
-    ) {
-      setMessage("Latitude and longitude must be numbers.");
-      setCreatingPlace(false);
+      const data = await response.json();
+
+      const results: SearchResult[] = data
+        .map((item: any) => ({
+          city:
+            item.address?.city ||
+            item.address?.town ||
+            item.address?.municipality ||
+            item.address?.village ||
+            item.display_name?.split(",")[0] ||
+            "",
+
+          country: item.address?.country || "",
+
+          latitude: Number(item.lat),
+          longitude: Number(item.lon),
+        }))
+        .filter(
+          (item: SearchResult) =>
+            item.city &&
+            item.country &&
+            !Number.isNaN(item.latitude) &&
+            !Number.isNaN(item.longitude)
+        );
+
+      setSearchResults(results);
+
+      if (results.length === 0) {
+        setMessage("No places found.");
+      }
+    } catch (error) {
+      console.error("CITY SEARCH ERROR:", error);
+      setMessage("Could not find that place.");
+    } finally {
+      setSearchingCity(false);
+    }
+  }
+
+  // ==========================================
+  // 3. SELECT SEARCH RESULT
+  // ==========================================
+
+  async function selectSearchResult(result: SearchResult) {
+    setMessage("");
+
+    // Check if this place already exists
+    const existingPlace = places.find(
+      (place) =>
+        place.city.toLowerCase() === result.city.toLowerCase() &&
+        place.country.toLowerCase() === result.country.toLowerCase()
+    );
+
+    if (existingPlace) {
+      setPlaceId(existingPlace.id);
+      setCitySearch("");
+      setSearchResults([]);
+
+      setMessage(
+        `${existingPlace.city}, ${existingPlace.country} selected ✨`
+      );
+
       return;
     }
 
+    // Create new place in Supabase
     const { data, error } = await supabase
       .from("places")
       .insert({
-        user_id: null,
-        city: newCity.trim(),
-        country: newCountry.trim(),
-        latitude,
-        longitude,
-        description: newDescription.trim() || null,
+        city: result.city,
+        country: result.country,
+        latitude: result.latitude,
+        longitude: result.longitude,
       })
       .select()
       .single();
@@ -107,42 +158,29 @@ export default function AddMemory() {
       console.error("CREATE PLACE ERROR:", error);
 
       setMessage(
-        `Place could not be created: ${
+        `Could not create place: ${
           error?.message ?? "Unknown error"
         }`
       );
 
-      setCreatingPlace(false);
       return;
     }
 
-    // Add the new place to the dropdown
-    setPlaces((current) =>
-      [...current, data].sort((a, b) =>
-        a.city.localeCompare(b.city)
-      )
-    );
+    // Add the new place to local state
+    setPlaces((current) => [...current, data]);
 
-    // Automatically select the new place
+    // Automatically select it
     setPlaceId(data.id);
 
-    // Reset new-place form
-    setNewCity("");
-    setNewCountry("");
-    setNewLatitude("");
-    setNewLongitude("");
-    setNewDescription("");
+    // Clear search
+    setCitySearch("");
+    setSearchResults([]);
 
-    setShowNewPlace(false);
-    setCreatingPlace(false);
-
-    setMessage(
-      `Place created ✨ ${data.city}, ${data.country}`
-    );
+    setMessage(`${data.city}, ${data.country} added ✨`);
   }
 
   // ==========================================
-  // SAVE MEMORY
+  // 4. SAVE JOURNAL + PHOTOS
   // ==========================================
 
   async function saveMemory() {
@@ -155,7 +193,7 @@ export default function AddMemory() {
     setMessage("");
 
     // ==========================================
-    // 1. CREATE JOURNAL
+    // CREATE JOURNAL
     // ==========================================
 
     const {
@@ -185,7 +223,7 @@ export default function AddMemory() {
     }
 
     // ==========================================
-    // 2. UPLOAD PHOTOS
+    // UPLOAD PHOTOS
     // ==========================================
 
     const photoRows: {
@@ -196,16 +234,13 @@ export default function AddMemory() {
 
     for (const photo of photos) {
       const extension =
-        photo.name.split(".").pop()?.toLowerCase() ||
-        "jpg";
+        photo.name.split(".").pop()?.toLowerCase() || "jpg";
 
       const uniqueName = `${Date.now()}-${Math.random()
         .toString(36)
         .slice(2)}.${extension}`;
 
       const filePath = `journals/${uniqueName}`;
-
-      console.log("UPLOADING PHOTO:", filePath);
 
       const {
         data: uploadData,
@@ -235,7 +270,7 @@ export default function AddMemory() {
       console.log("UPLOAD SUCCESS:", uploadData);
 
       // ==========================================
-      // 3. CREATE PUBLIC URL
+      // CREATE PUBLIC URL
       // ==========================================
 
       const {
@@ -246,14 +281,7 @@ export default function AddMemory() {
 
       const publicUrl = publicUrlData.publicUrl;
 
-      console.log(
-        "PUBLIC PHOTO URL:",
-        publicUrl
-      );
-
       if (!publicUrl) {
-        console.error("PUBLIC URL WAS EMPTY");
-
         setMessage(
           "Photo uploaded, but the public URL could not be created."
         );
@@ -261,10 +289,6 @@ export default function AddMemory() {
         setSaving(false);
         return;
       }
-
-      // ==========================================
-      // 4. ADD PHOTO RECORD
-      // ==========================================
 
       photoRows.push({
         place_id: placeId,
@@ -274,7 +298,7 @@ export default function AddMemory() {
     }
 
     // ==========================================
-    // 5. SAVE PHOTO RECORDS
+    // SAVE PHOTO RECORDS
     // ==========================================
 
     if (photoRows.length > 0) {
@@ -287,15 +311,7 @@ export default function AddMemory() {
         .select();
 
       if (photoError) {
-        console.error(
-          "PHOTO INSERT ERROR:",
-          {
-            message: photoError.message,
-            details: photoError.details,
-            hint: photoError.hint,
-            code: photoError.code,
-          }
-        );
+        console.error("PHOTO INSERT ERROR:", photoError);
 
         setMessage(
           `Photos could not be saved: ${photoError.message}`
@@ -312,7 +328,7 @@ export default function AddMemory() {
     }
 
     // ==========================================
-    // 6. SUCCESS
+    // SUCCESS
     // ==========================================
 
     setTitle("");
@@ -353,175 +369,108 @@ export default function AddMemory() {
           Save a little piece of your journey.
         </p>
 
-        {/* ======================================
-            PLACE
-        ====================================== */}
+        {/* Place */}
 
         <div className="mt-12">
           <label className="text-sm text-white/60">
             Place
           </label>
 
-          <select
-            value={placeId}
-            onChange={(e) =>
-              setPlaceId(e.target.value)
-            }
-            className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none"
-          >
-            <option
-              value=""
-              className="bg-black"
-            >
-              Select a place
-            </option>
+          {/* Search city */}
 
-            {places.map((place) => (
+          <div className="mt-3">
+            <div className="flex gap-3">
+              <input
+                value={citySearch}
+                onChange={(e) =>
+                  setCitySearch(e.target.value)
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    searchCity();
+                  }
+                }}
+                placeholder="Search for a city..."
+                className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
+              />
+
+              <button
+                type="button"
+                onClick={searchCity}
+                disabled={searchingCity}
+                className="rounded-2xl bg-white px-5 py-4 text-sm text-black transition hover:bg-white/80 disabled:opacity-50"
+              >
+                {searchingCity
+                  ? "Searching..."
+                  : "Search"}
+              </button>
+            </div>
+
+            {/* Search results */}
+
+            {searchResults.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {searchResults.map(
+                  (result, index) => (
+                    <button
+                      key={`${result.city}-${result.country}-${index}`}
+                      type="button"
+                      onClick={() =>
+                        selectSearchResult(result)
+                      }
+                      className="block w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left transition hover:bg-white/10"
+                    >
+                      <div className="text-white">
+                        {result.city},{" "}
+                        {result.country}
+                      </div>
+
+                      <div className="mt-1 text-xs text-white/30">
+                        {result.latitude.toFixed(4)},{" "}
+                        {result.longitude.toFixed(4)}
+                      </div>
+                    </button>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Existing places */}
+
+          <div className="mt-4">
+            <label className="text-xs text-white/30">
+              Or choose an existing place
+            </label>
+
+            <select
+              value={placeId}
+              onChange={(e) =>
+                setPlaceId(e.target.value)
+              }
+              className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none"
+            >
               <option
-                key={place.id}
-                value={place.id}
+                value=""
                 className="bg-black"
               >
-                {place.city}, {place.country}
+                Select a place
               </option>
-            ))}
-          </select>
 
-          {/* Add new place button */}
-
-          <button
-            type="button"
-            onClick={() => {
-              setShowNewPlace(!showNewPlace);
-              setMessage("");
-            }}
-            className="mt-4 text-sm text-white/50 transition hover:text-white"
-          >
-            {showNewPlace
-              ? "− Cancel new place"
-              : "+ Add a new place"}
-          </button>
+              {places.map((place) => (
+                <option
+                  key={place.id}
+                  value={place.id}
+                  className="bg-black"
+                >
+                  {place.city}, {place.country}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* ======================================
-            NEW PLACE FORM
-        ====================================== */}
-
-        {showNewPlace && (
-          <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-
-            <p className="text-sm uppercase tracking-[0.3em] text-white/40">
-              New Place
-            </p>
-
-            {/* City */}
-
-            <div className="mt-6">
-              <label className="text-sm text-white/60">
-                City
-              </label>
-
-              <input
-                value={newCity}
-                onChange={(e) =>
-                  setNewCity(e.target.value)
-                }
-                placeholder="San Pedro de Atacama"
-                className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
-              />
-            </div>
-
-            {/* Country */}
-
-            <div className="mt-5">
-              <label className="text-sm text-white/60">
-                Country
-              </label>
-
-              <input
-                value={newCountry}
-                onChange={(e) =>
-                  setNewCountry(e.target.value)
-                }
-                placeholder="Chile"
-                className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
-              />
-            </div>
-
-            {/* Coordinates */}
-
-            <div className="mt-5 grid grid-cols-2 gap-4">
-
-              <div>
-                <label className="text-sm text-white/60">
-                  Latitude
-                </label>
-
-                <input
-                  value={newLatitude}
-                  onChange={(e) =>
-                    setNewLatitude(e.target.value)
-                  }
-                  placeholder="-22.9087"
-                  inputMode="decimal"
-                  className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm text-white/60">
-                  Longitude
-                </label>
-
-                <input
-                  value={newLongitude}
-                  onChange={(e) =>
-                    setNewLongitude(e.target.value)
-                  }
-                  placeholder="-67.9236"
-                  inputMode="decimal"
-                  className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
-                />
-              </div>
-
-            </div>
-
-            {/* Description */}
-
-            <div className="mt-5">
-              <label className="text-sm text-white/60">
-                Description
-              </label>
-
-              <textarea
-                value={newDescription}
-                onChange={(e) =>
-                  setNewDescription(e.target.value)
-                }
-                placeholder="A desert town surrounded by incredible landscapes..."
-                rows={4}
-                className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
-              />
-            </div>
-
-            {/* Create */}
-
-            <button
-              type="button"
-              onClick={createPlace}
-              disabled={creatingPlace}
-              className="mt-6 w-full rounded-full bg-white px-6 py-4 text-sm uppercase tracking-widest text-black transition hover:bg-white/80 disabled:opacity-50"
-            >
-              {creatingPlace
-                ? "Creating..."
-                : "Create Place"}
-            </button>
-          </div>
-        )}
-
-        {/* ======================================
-            TITLE
-        ====================================== */}
+        {/* Title */}
 
         <div className="mt-8">
           <label className="text-sm text-white/60">
@@ -538,9 +487,7 @@ export default function AddMemory() {
           />
         </div>
 
-        {/* ======================================
-            CONTENT
-        ====================================== */}
+        {/* Content */}
 
         <div className="mt-8">
           <label className="text-sm text-white/60">
@@ -558,9 +505,7 @@ export default function AddMemory() {
           />
         </div>
 
-        {/* ======================================
-            PHOTOS
-        ====================================== */}
+        {/* Photos */}
 
         <div className="mt-8">
           <label className="text-sm text-white/60">
@@ -568,7 +513,6 @@ export default function AddMemory() {
           </label>
 
           <label className="mt-3 flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-white/20 bg-white/5 px-6 py-10 text-center transition hover:bg-white/10">
-
             <span className="text-3xl">
               📷
             </span>
@@ -597,21 +541,16 @@ export default function AddMemory() {
                 setPhotos(files);
               }}
             />
-
           </label>
-
-          {/* Selected photos */}
 
           {photos.length > 0 && (
             <div className="mt-4 space-y-2">
-
               {photos.map(
                 (photo, index) => (
                   <div
                     key={`${photo.name}-${index}`}
                     className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3"
                   >
-
                     <span className="truncate text-sm text-white/60">
                       {photo.name}
                     </span>
@@ -630,18 +569,14 @@ export default function AddMemory() {
                     >
                       ×
                     </button>
-
                   </div>
                 )
               )}
-
             </div>
           )}
         </div>
 
-        {/* ======================================
-            SAVE
-        ====================================== */}
+        {/* Save */}
 
         <button
           onClick={saveMemory}
@@ -660,7 +595,6 @@ export default function AddMemory() {
             {message}
           </p>
         )}
-
       </div>
     </main>
   );
