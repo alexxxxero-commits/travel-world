@@ -9,7 +9,7 @@ type Place = {
   city: string;
   country: string;
   latitude: number | null;
-  longtitude: number | null;
+  longitude: number | null;
   description: string | null;
 };
 
@@ -42,7 +42,7 @@ export default function AddMemory() {
       const { data, error } = await supabase
         .from("places")
         .select(
-          "id, user_id, city, country, latitude, longtitude, description"
+          "id, user_id, city, country, latitude, longitude, description"
         )
         .order("city");
 
@@ -76,14 +76,14 @@ export default function AddMemory() {
         ? null
         : Number(newLatitude);
 
-    const longtitude =
+    const longitude =
       newLongitude.trim() === ""
         ? null
         : Number(newLongitude);
 
     if (
       (latitude !== null && Number.isNaN(latitude)) ||
-      (longtitude !== null && Number.isNaN(longtitude))
+      (longitude !== null && Number.isNaN(longitude))
     ) {
       setMessage("Latitude and longitude must be numbers.");
       setCreatingPlace(false);
@@ -97,7 +97,7 @@ export default function AddMemory() {
         city: newCity.trim(),
         country: newCountry.trim(),
         latitude,
-        longtitude,
+        longitude,
         description: newDescription.trim() || null,
       })
       .select()
