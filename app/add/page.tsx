@@ -531,7 +531,6 @@ export default function AddMemory() {
               type="file"
               accept="image/*"
               multiple
-              capture="environment"
               className="hidden"
               onChange={(e) => {
                 const files = Array.from(
