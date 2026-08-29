@@ -4,29 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-export default function SignUp() {
+export default function Login() {
   const router = useRouter();
 
-  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  async function handleSignUp() {
-    if (!username.trim() || !email.trim() || !password) {
+  async function handleLogin() {
+    if (!email.trim() || !password) {
       setMessage("Please fill in everything.");
-      return;
-    }
-
-    if (username.trim().length < 3) {
-      setMessage("Username must be at least 3 characters.");
-      return;
-    }
-
-    if (password.length < 6) {
-      setMessage("Password must be at least 6 characters.");
       return;
     }
 
@@ -35,34 +24,27 @@ export default function SignUp() {
 
     try {
       // ==========================================
-      // CREATE AUTH USER
+      // LOGIN
       // ==========================================
 
       const {
-        data: authData,
-        error: authError,
-      } = await supabase.auth.signUp({
+        data,
+        error,
+      } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
-
-        // Save username inside Auth metadata.
-        // The database trigger will use this
-        // to automatically create the profile.
-        options: {
-            emailRedirectTo: `${window.location.origin}/`,
-        },
       });
 
-      if (authError) {
-        console.error("SIGN UP ERROR:", authError);
+      if (error) {
+        console.error("LOGIN ERROR:", error);
 
-        setMessage(authError.message);
+        setMessage(error.message);
         setLoading(false);
         return;
       }
 
-      if (!authData.user) {
-        setMessage("Could not create account.");
+      if (!data.user) {
+        setMessage("Could not log in.");
         setLoading(false);
         return;
       }
@@ -71,19 +53,17 @@ export default function SignUp() {
       // SUCCESS
       // ==========================================
 
-      console.log("USER CREATED:", authData.user);
+      console.log("LOGGED IN USER:", data.user);
 
-      setMessage(
-        authData.session
-          ? "Account created ✨"
-          : "Account created ✨ Please check your email to confirm."
-      );
+      setMessage("Welcome back ✨");
 
       setTimeout(() => {
         router.push("/");
-      }, 1500);
+        router.refresh();
+      }, 700);
+
     } catch (error) {
-      console.error("UNEXPECTED SIGN UP ERROR:", error);
+      console.error("UNEXPECTED LOGIN ERROR:", error);
 
       setMessage(
         "Something went wrong. Please try again."
@@ -104,34 +84,16 @@ export default function SignUp() {
         </p>
 
         <h1 className="mt-4 text-5xl font-light">
-          Create account
+          Welcome back
         </h1>
 
         <p className="mt-4 text-white/50">
-          Start building your world.
+          Enter your world again.
         </p>
-
-        {/* Username */}
-
-        <div className="mt-12">
-          <label className="text-sm text-white/60">
-            Username
-          </label>
-
-          <input
-            value={username}
-            onChange={(e) =>
-              setUsername(e.target.value)
-            }
-            placeholder="alex"
-            autoComplete="username"
-            className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20 focus:border-white/30"
-          />
-        </div>
 
         {/* Email */}
 
-        <div className="mt-6">
+        <div className="mt-12">
           <label className="text-sm text-white/60">
             Email
           </label>
@@ -161,23 +123,28 @@ export default function SignUp() {
             onChange={(e) =>
               setPassword(e.target.value)
             }
-            placeholder="At least 6 characters"
-            autoComplete="new-password"
+            placeholder="Your password"
+            autoComplete="current-password"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleLogin();
+              }
+            }}
             className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20 focus:border-white/30"
           />
         </div>
 
-        {/* Sign Up */}
+        {/* Login */}
 
         <button
           type="button"
-          onClick={handleSignUp}
+          onClick={handleLogin}
           disabled={loading}
           className="mt-8 w-full rounded-full bg-white px-6 py-4 text-sm uppercase tracking-widest text-black transition hover:bg-white/80 disabled:opacity-50"
         >
           {loading
-            ? "Creating account..."
-            : "Sign Up"}
+            ? "Logging in..."
+            : "Log in"}
         </button>
 
         {/* Message */}
@@ -188,21 +155,22 @@ export default function SignUp() {
           </p>
         )}
 
-        {/* Login */}
+        {/* Sign Up */}
 
         <p className="mt-8 text-center text-sm text-white/40">
-          Already have an account?{" "}
+          Don't have an account?{" "}
 
           <button
             type="button"
             onClick={() =>
-              router.push("/login")
+              router.push("/signup")
             }
             className="text-white transition hover:text-white/70"
           >
-            Log in
+            Sign up
           </button>
         </p>
+
       </div>
     </main>
   );
