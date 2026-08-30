@@ -1,8 +1,40 @@
 import Globe from "@/components/Globe";
-import UserNav from "@/components/UserNav";
 import { supabase } from "@/lib/supabase";
 
 export default async function Home() {
+  // ==========================================
+  // 1. GET CURRENT USER
+  // ==========================================
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // ==========================================
+  // 2. GET USER PROFILE
+  // ==========================================
+
+  let username = "";
+
+  if (user) {
+    const { data: profile, error: profileError } =
+      await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single();
+
+    if (profileError) {
+      console.error("PROFILE ERROR:", profileError);
+    }
+
+    username = profile?.username ?? "";
+  }
+
+  // ==========================================
+  // 3. LOAD PLACES
+  // ==========================================
+
   const { data: places, error } = await supabase
     .from("places")
     .select(`
@@ -39,9 +71,64 @@ export default async function Home() {
     0
   );
 
+  // ==========================================
+  // 4. HOME PAGE
+  // ==========================================
+
   return (
     <main className="min-h-screen bg-black text-white">
-      <UserNav />
+
+      {/* ==========================================
+          TOP RIGHT AUTH
+      ========================================== */}
+
+      <div className="fixed right-6 top-6 z-50">
+        {user ? (
+          <div className="flex items-center gap-3">
+
+            {/* Username */}
+
+            <div className="rounded-full border border-white/10 bg-black/70 px-5 py-2.5 text-sm backdrop-blur">
+              @{username || "user"}
+            </div>
+
+            {/* Logout */}
+
+            <form action="/auth/signout" method="post">
+              <button
+                type="submit"
+                className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm text-white/60 transition hover:bg-white hover:text-black"
+              >
+                Log out
+              </button>
+            </form>
+
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+
+            <a
+              href="/login"
+              className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm text-white/70 transition hover:bg-white hover:text-black"
+            >
+              Log in
+            </a>
+
+            <a
+              href="/signup"
+              className="rounded-full bg-white px-5 py-2.5 text-sm text-black transition hover:bg-white/80"
+            >
+              Sign up
+            </a>
+
+          </div>
+        )}
+      </div>
+
+      {/* ==========================================
+          MAIN CONTENT
+      ========================================== */}
+
       <div className="flex min-h-screen flex-col items-center px-6 py-20">
 
         {/* Header */}
@@ -74,7 +161,9 @@ export default async function Home() {
             </p>
 
             <p className="mt-2">
-              {countryCount === 1 ? "Country" : "Countries"}
+              {countryCount === 1
+                ? "Country"
+                : "Countries"}
             </p>
           </div>
 
@@ -84,7 +173,9 @@ export default async function Home() {
             </p>
 
             <p className="mt-2">
-              {cityCount === 1 ? "City" : "Cities"}
+              {cityCount === 1
+                ? "City"
+                : "Cities"}
             </p>
           </div>
 
@@ -94,7 +185,9 @@ export default async function Home() {
             </p>
 
             <p className="mt-2">
-              {memoryCount === 1 ? "Memory" : "Memories"}
+              {memoryCount === 1
+                ? "Memory"
+                : "Memories"}
             </p>
           </div>
 
@@ -102,12 +195,14 @@ export default async function Home() {
 
         {/* Add Memory */}
 
-        <a
-          href="/add"
-          className="mt-16 rounded-full border border-white/20 px-8 py-3 text-sm uppercase tracking-widest transition hover:bg-white hover:text-black"
-        >
-          Add Memory
-        </a>
+        {user && (
+          <a
+            href="/add"
+            className="mt-16 rounded-full border border-white/20 px-8 py-3 text-sm uppercase tracking-widest transition hover:bg-white hover:text-black"
+          >
+            Add Memory
+          </a>
+        )}
 
       </div>
     </main>
