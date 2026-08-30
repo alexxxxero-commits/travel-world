@@ -1,4 +1,5 @@
 import Globe from "@/components/Globe";
+import UserNav from "@/components/UserNav";
 import { supabase } from "@/lib/supabase";
 
 export default async function Home() {
@@ -40,6 +41,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-black text-white">
+      <UserNav />
       <div className="flex min-h-screen flex-col items-center px-6 py-20">
 
         {/* Header */}
