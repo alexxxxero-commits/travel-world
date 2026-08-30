@@ -1,46 +1,83 @@
 import Globe from "@/components/Globe";
 import UserMenu from "@/components/UserMenu";
-import { supabase } from "@/lib/supabase";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export default async function Home() {
   // ==========================================
-  // 1. GET CURRENT USER
+  // 1. CREATE SERVER SUPABASE CLIENT
+  // ==========================================
+
+  const supabase = await createSupabaseServerClient();
+
+  // ==========================================
+  // 2. GET CURRENT USER
   // ==========================================
 
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
 
+  if (userError) {
+    console.error("AUTH ERROR:", userError);
+  }
+
+  console.log("CURRENT USER:", user?.id);
+
   // ==========================================
-  // 2. LOAD PLACES
+  // 3. GET USER PROFILE
   // ==========================================
 
-  const { data: places, error } = await supabase
-    .from("places")
-    .select(`
-      *,
-      journals (
-        id,
-        title,
-        content,
-        created_at,
-        photos (
+  let username = "";
+
+  if (user) {
+    const { data: profile, error: profileError } =
+      await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single();
+
+    if (profileError) {
+      console.error("PROFILE ERROR:", profileError);
+    }
+
+    username = profile?.username ?? "";
+  }
+
+  // ==========================================
+  // 4. LOAD PLACES + JOURNALS + PHOTOS
+  // ==========================================
+
+  const { data: places, error: placesError } =
+    await supabase
+      .from("places")
+      .select(`
+        *,
+        journals (
           id,
-          url,
-          caption,
-          created_at
+          title,
+          content,
+          created_at,
+          user_id,
+          photos (
+            id,
+            url,
+            caption,
+            created_at
+          )
         )
-      )
-    `);
+      `)
+      .order("city");
 
-  if (error) {
-    console.error("SUPABASE ERROR:", error);
+  if (placesError) {
+    console.error("PLACES ERROR:", placesError);
   }
 
   const safePlaces = places ?? [];
 
   // ==========================================
-  // 3. CALCULATE STATS
+  // 5. CALCULATE STATS
   // ==========================================
 
   const countryCount = new Set(
@@ -56,7 +93,7 @@ export default async function Home() {
   );
 
   // ==========================================
-  // 4. HOME PAGE
+  // 6. HOME PAGE
   // ==========================================
 
   return (
@@ -136,12 +173,20 @@ export default async function Home() {
 
         </div>
 
+        {/* User info */}
+
+        {user && (
+          <p className="mt-8 text-sm text-white/30">
+            Welcome back, @{username || "user"}
+          </p>
+        )}
+
         {/* Add Memory */}
 
         {user && (
           <a
             href="/add"
-            className="mt-16 rounded-full border border-white/20 px-8 py-3 text-sm uppercase tracking-widest transition hover:bg-white hover:text-black"
+            className="mt-8 rounded-full border border-white/20 px-8 py-3 text-sm uppercase tracking-widest transition hover:bg-white hover:text-black"
           >
             Add Memory
           </a>
