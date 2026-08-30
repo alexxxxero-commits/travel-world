@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
 
 export default function Login() {
   const router = useRouter();
+  const supabase = createClient();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,12 +41,14 @@ export default function Login() {
 
         setMessage(error.message);
         setLoading(false);
+
         return;
       }
 
       if (!data.user) {
         setMessage("Could not log in.");
         setLoading(false);
+
         return;
       }
 
@@ -63,7 +66,10 @@ export default function Login() {
       }, 700);
 
     } catch (error) {
-      console.error("UNEXPECTED LOGIN ERROR:", error);
+      console.error(
+        "UNEXPECTED LOGIN ERROR:",
+        error
+      );
 
       setMessage(
         "Something went wrong. Please try again."

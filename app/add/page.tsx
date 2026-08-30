@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Place = {
@@ -19,29 +20,48 @@ type SearchResult = {
 };
 
 export default function AddMemory() {
+  const router = useRouter();
+
   const [places, setPlaces] = useState<Place[]>([]);
   const [placeId, setPlaceId] = useState("");
-
   const [citySearch, setCitySearch] = useState("");
   const [searchingCity, setSearchingCity] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
-
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
   // ==========================================
-  // 1. LOAD EXISTING PLACES
+  // 1. LOAD CURRENT USER + EXISTING PLACES
   // ==========================================
 
   useEffect(() => {
-    async function loadPlaces() {
+    async function loadData() {
+      // Get current logged-in user
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error("GET USER ERROR:", userError);
+        setMessage("Could not verify your login.");
+        return;
+      }
+
+      // Not logged in
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      // Load only this user's places
       const { data, error } = await supabase
         .from("places")
         .select("id, city, country, latitude, longitude")
+        .eq("user_id", user.id)
         .order("city");
 
       if (error) {
@@ -53,8 +73,8 @@ export default function AddMemory() {
       setPlaces(data ?? []);
     }
 
-    loadPlaces();
-  }, []);
+    loadData();
+  }, [router]);
 
   // ==========================================
   // 2. SEARCH CITY
@@ -89,9 +109,7 @@ export default function AddMemory() {
             item.address?.village ||
             item.display_name?.split(",")[0] ||
             "",
-
           country: item.address?.country || "",
-
           latitude: Number(item.lat),
           longitude: Number(item.lon),
         }))
@@ -142,6 +160,19 @@ export default function AddMemory() {
       return;
     }
 
+    // Get current logged-in user
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      console.error("GET USER ERROR:", userError);
+      setMessage("You must be logged in to create a place.");
+      router.push("/login");
+      return;
+    }
+
     // Create new place in Supabase
     const { data, error } = await supabase
       .from("places")
@@ -150,6 +181,10 @@ export default function AddMemory() {
         country: result.country,
         latitude: result.latitude,
         longitude: result.longitude,
+
+        // IMPORTANT:
+        // This place belongs to the currently logged-in user.
+        user_id: user.id,
       })
       .select()
       .single();
@@ -166,7 +201,7 @@ export default function AddMemory() {
       return;
     }
 
-    // Add the new place to local state
+    // Add new place to local state
     setPlaces((current) => [...current, data]);
 
     // Automatically select it
@@ -191,6 +226,23 @@ export default function AddMemory() {
 
     setSaving(true);
     setMessage("");
+
+    // ==========================================
+    // CHECK CURRENT USER
+    // ==========================================
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      console.error("GET USER ERROR:", userError);
+      setMessage("You must be logged in to save a memory.");
+      setSaving(false);
+      router.push("/login");
+      return;
+    }
 
     // ==========================================
     // CREATE JOURNAL
@@ -311,7 +363,10 @@ export default function AddMemory() {
         .select();
 
       if (photoError) {
-        console.error("PHOTO INSERT ERROR:", photoError);
+        console.error(
+          "PHOTO INSERT ERROR:",
+          photoError
+        );
 
         setMessage(
           `Photos could not be saved: ${photoError.message}`
@@ -356,7 +411,6 @@ export default function AddMemory() {
       <div className="mx-auto max-w-xl">
 
         {/* Header */}
-
         <p className="text-sm uppercase tracking-[0.4em] text-white/40">
           The World Of Mine
         </p>
@@ -370,16 +424,15 @@ export default function AddMemory() {
         </p>
 
         {/* Place */}
-
         <div className="mt-12">
           <label className="text-sm text-white/60">
             Place
           </label>
 
           {/* Search city */}
-
           <div className="mt-3">
             <div className="flex gap-3">
+
               <input
                 value={citySearch}
                 onChange={(e) =>
@@ -404,10 +457,10 @@ export default function AddMemory() {
                   ? "Searching..."
                   : "Search"}
               </button>
+
             </div>
 
             {/* Search results */}
-
             {searchResults.length > 0 && (
               <div className="mt-3 space-y-2">
                 {searchResults.map(
@@ -437,7 +490,6 @@ export default function AddMemory() {
           </div>
 
           {/* Existing places */}
-
           <div className="mt-4">
             <label className="text-xs text-white/30">
               Or choose an existing place
@@ -471,7 +523,6 @@ export default function AddMemory() {
         </div>
 
         {/* Title */}
-
         <div className="mt-8">
           <label className="text-sm text-white/60">
             Title
@@ -488,7 +539,6 @@ export default function AddMemory() {
         </div>
 
         {/* Content */}
-
         <div className="mt-8">
           <label className="text-sm text-white/60">
             Your story
@@ -506,7 +556,6 @@ export default function AddMemory() {
         </div>
 
         {/* Photos */}
-
         <div className="mt-8">
           <label className="text-sm text-white/60">
             Photos
@@ -576,7 +625,6 @@ export default function AddMemory() {
         </div>
 
         {/* Save */}
-
         <button
           onClick={saveMemory}
           disabled={saving}
@@ -588,12 +636,12 @@ export default function AddMemory() {
         </button>
 
         {/* Message */}
-
         {message && (
           <p className="mt-6 text-center text-sm text-white/60">
             {message}
           </p>
         )}
+
       </div>
     </main>
   );
