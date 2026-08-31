@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import JournalActions from "@/components/JournalActions";
 
 type PageProps = {
   params: Promise<{
@@ -28,7 +29,6 @@ export default async function PlacePage({
   params,
 }: PageProps) {
   const supabase = await createClient();
-
   const { id } = await params;
 
   // ==========================================
@@ -77,10 +77,7 @@ export default async function PlacePage({
     .single();
 
   if (placeError) {
-    console.error(
-      "PLACE ERROR:",
-      placeError
-    );
+    console.error("PLACE ERROR:", placeError);
   }
 
   // ==========================================
@@ -123,10 +120,7 @@ export default async function PlacePage({
     });
 
   if (journalError) {
-    console.error(
-      "JOURNAL ERROR:",
-      journalError
-    );
+    console.error("JOURNAL ERROR:", journalError);
   }
 
   // ==========================================
@@ -145,43 +139,35 @@ export default async function PlacePage({
     });
 
   if (photoError) {
-    console.error(
-      "PHOTO ERROR:",
-      photoError
-    );
+    console.error("PHOTO ERROR:", photoError);
   }
 
   // ==========================================
   // SAFE ARRAYS
   // ==========================================
 
-  const journalList: Journal[] =
-    journals ?? [];
-
-  const photoList: Photo[] =
-    photos ?? [];
+  const journalList: Journal[] = journals ?? [];
+  const photoList: Photo[] = photos ?? [];
 
   // ==========================================
   // GROUP PHOTOS BY JOURNAL
   // ==========================================
 
-  const photosByJournal =
-    photoList.reduce<Record<string, Photo[]>>(
-      (acc, photo) => {
-        if (!photo.journal_id) {
-          return acc;
-        }
+  const photosByJournal = photoList.reduce<
+    Record<string, Photo[]>
+  >((acc, photo) => {
+    if (!photo.journal_id) {
+      return acc;
+    }
 
-        if (!acc[photo.journal_id]) {
-          acc[photo.journal_id] = [];
-        }
+    if (!acc[photo.journal_id]) {
+      acc[photo.journal_id] = [];
+    }
 
-        acc[photo.journal_id].push(photo);
+    acc[photo.journal_id].push(photo);
 
-        return acc;
-      },
-      {}
-    );
+    return acc;
+  }, {});
 
   // ==========================================
   // PAGE
@@ -190,6 +176,7 @@ export default async function PlacePage({
   return (
     <main className="min-h-screen bg-black text-white">
       <div className="mx-auto max-w-5xl px-6 py-20">
+
         {/* BACK */}
 
         <a
@@ -334,26 +321,41 @@ export default async function PlacePage({
                     key={journal.id}
                     className="rounded-3xl border border-white/10 bg-white/5 p-7 transition hover:bg-white/[0.08]"
                   >
-                    {/* DATE */}
 
-                    <p className="text-xs text-white/30">
-                      {new Date(
-                        journal.created_at
-                      ).toLocaleDateString(
-                        "en-US",
-                        {
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                        }
-                      )}
-                    </p>
+                    {/* JOURNAL HEADER */}
 
-                    {/* TITLE */}
+                    <div className="flex items-start justify-between gap-6">
 
-                    <h3 className="mt-3 text-3xl font-light">
-                      {journal.title}
-                    </h3>
+                      <div>
+                        {/* DATE */}
+
+                        <p className="text-xs text-white/30">
+                          {new Date(
+                            journal.created_at
+                          ).toLocaleDateString(
+                            "en-US",
+                            {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
+                            }
+                          )}
+                        </p>
+
+                        {/* TITLE */}
+
+                        <h3 className="mt-3 text-3xl font-light">
+                          {journal.title}
+                        </h3>
+                      </div>
+
+                      {/* EDIT / DELETE */}
+
+                      <JournalActions
+                        journalId={journal.id}
+                      />
+
+                    </div>
 
                     {/* PHOTOS */}
 
@@ -380,6 +382,7 @@ export default async function PlacePage({
                     <p className="mt-6 whitespace-pre-line text-sm leading-8 text-white/60">
                       {journal.content}
                     </p>
+
                   </article>
                 );
               })
@@ -406,6 +409,7 @@ export default async function PlacePage({
           THE WORLD OF MINE ·{" "}
           {place.city.toUpperCase()}
         </div>
+
       </div>
     </main>
   );
