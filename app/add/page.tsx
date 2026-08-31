@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
@@ -20,7 +20,7 @@ type SearchResult = {
 };
 
 export default function AddMemory() {
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = createClient();
   const router = useRouter();
 
   const [places, setPlaces] = useState<Place[]>([]);
@@ -71,15 +71,11 @@ export default function AddMemory() {
   // 2. SEARCH CITY
   // ==========================================
 
-  async function searchCity(query?: string) {
-    const searchText = (query ?? citySearch).trim();
-
-    if (!searchText) {
-      setSearchResults([]);
-      return;
-    }
+  async function searchCity() {
+    if (!citySearch.trim()) return;
 
     setSearchingCity(true);
+    setSearchResults([]);
     setMessage("");
 
     try {
@@ -87,9 +83,8 @@ export default function AddMemory() {
         `https://nominatim.openstreetmap.org/search` +
         `?format=jsonv2` +
         `&addressdetails=1` +
-        `&limit=8` +
-        `&accept-language=en` +
-        `&q=${encodeURIComponent(searchText)}`;
+        `&limit=5` +
+        `&q=${encodeURIComponent(citySearch.trim())}`;
 
       const response = await fetch(url);
 
@@ -106,7 +101,6 @@ export default function AddMemory() {
             item.address?.town ||
             item.address?.municipality ||
             item.address?.village ||
-            item.address?.county ||
             item.display_name?.split(",")[0] ||
             "",
 
@@ -124,27 +118,13 @@ export default function AddMemory() {
             !Number.isNaN(item.longitude)
         );
 
-      // Remove duplicate city + country combinations
-      const uniqueResults = results.filter(
-        (result, index, array) =>
-          index ===
-          array.findIndex(
-            (item) =>
-              item.city.toLowerCase() ===
-                result.city.toLowerCase() &&
-              item.country.toLowerCase() ===
-                result.country.toLowerCase()
-          )
-      );
+      setSearchResults(results);
 
-      setSearchResults(uniqueResults);
-
-      if (uniqueResults.length === 0) {
+      if (results.length === 0) {
         setMessage("No places found.");
       }
     } catch (error) {
       console.error("CITY SEARCH ERROR:", error);
-      setSearchResults([]);
       setMessage("Could not find that place.");
     } finally {
       setSearchingCity(false);
@@ -152,30 +132,7 @@ export default function AddMemory() {
   }
 
   // ==========================================
-  // 3. AUTO SEARCH WHILE TYPING
-  // ==========================================
-
-  useEffect(() => {
-    const query = citySearch.trim();
-
-    // Don't search when the input is empty
-    if (!query) {
-      setSearchResults([]);
-      setSearchingCity(false);
-      return;
-    }
-
-    // Wait a little before searching so we don't
-    // send a request for every single keystroke.
-    const timeout = setTimeout(() => {
-      searchCity(query);
-    }, 400);
-
-    return () => clearTimeout(timeout);
-  }, [citySearch]);
-
-  // ==========================================
-  // 4. SELECT SEARCH RESULT
+  // 3. SELECT SEARCH RESULT
   // ==========================================
 
   async function selectSearchResult(result: SearchResult) {
@@ -219,7 +176,7 @@ export default function AddMemory() {
         latitude: result.latitude,
         longitude: result.longitude,
       })
-      .select("id, city, country, latitude, longitude")
+      .select()
       .single();
 
     if (error || !data) {
@@ -234,70 +191,28 @@ export default function AddMemory() {
       return;
     }
 
-    // Add newly-created place to local state
-    setPlaces((current) => {
-      const alreadyExists = current.some(
-        (place) => place.id === data.id
-      );
+    setPlaces((current) => [...current, data]);
 
-      if (alreadyExists) {
-        return current;
-      }
-
-      return [...current, data];
-    });
-
-    // IMPORTANT:
-    // This is what makes the place actually selected.
     setPlaceId(data.id);
 
     setCitySearch("");
     setSearchResults([]);
 
-    setMessage(`${data.city}, ${data.country} selected ✨`);
+    setMessage(`${data.city}, ${data.country} added ✨`);
   }
 
   // ==========================================
-  // 5. SELECT EXISTING PLACE
-  // ==========================================
-
-  function selectExistingPlace(id: string) {
-    setPlaceId(id);
-    setCitySearch("");
-    setSearchResults([]);
-    setMessage("");
-  }
-
-  // ==========================================
-  // 6. SAVE JOURNAL + PHOTOS
+  // 4. SAVE JOURNAL + PHOTOS
   // ==========================================
 
   async function saveMemory() {
-    // ==========================================
-    // VALIDATION
-    // ==========================================
-
-    if (!placeId) {
-      setMessage("Please select a place.");
-      return;
-    }
-
-    if (!title.trim()) {
-      setMessage("Please enter a title.");
-      return;
-    }
-
-    if (!content.trim()) {
-      setMessage("Please write something in your story.");
+    if (!placeId || !title.trim() || !content.trim()) {
+      setMessage("Please fill in everything.");
       return;
     }
 
     setSaving(true);
     setMessage("");
-
-    // ==========================================
-    // GET USER
-    // ==========================================
 
     const {
       data: { user },
@@ -305,40 +220,6 @@ export default function AddMemory() {
 
     if (!user) {
       setMessage("You must be logged in.");
-      setSaving(false);
-      return;
-    }
-
-    // ==========================================
-    // VERIFY PLACE
-    // ==========================================
-
-    const {
-      data: verifiedPlace,
-      error: placeError,
-    } = await supabase
-      .from("places")
-      .select("id")
-      .eq("id", placeId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (placeError) {
-      console.error("VERIFY PLACE ERROR:", placeError);
-
-      setMessage(
-        `Could not verify place: ${placeError.message}`
-      );
-
-      setSaving(false);
-      return;
-    }
-
-    if (!verifiedPlace) {
-      setMessage(
-        "The selected place could not be found. Please select the place again."
-      );
-
       setSaving(false);
       return;
     }
@@ -488,25 +369,20 @@ export default function AddMemory() {
     // SUCCESS
     // ==========================================
 
-    const photoCount = photos.length;
-
     setTitle("");
     setContent("");
     setPlaceId("");
-    setCitySearch("");
-    setSearchResults([]);
     setPhotos([]);
 
     setMessage(
-      photoCount > 0
-        ? `Memory saved ✨ ${photoCount} photo${
-            photoCount > 1 ? "s" : ""
+      photos.length > 0
+        ? `Memory saved ✨ ${photos.length} photo${
+            photos.length > 1 ? "s" : ""
           } added.`
         : "Memory saved ✨"
     );
 
     setSaving(false);
-
     // Return to homepage after saving
     setTimeout(() => {
       router.push("/");
@@ -533,34 +409,24 @@ export default function AddMemory() {
           Save a little piece of your journey.
         </p>
 
-        {/* ======================================
-            PLACE
-        ====================================== */}
+        {/* PLACE */}
 
         <div className="mt-12">
           <label className="text-sm text-white/60">
             Place
           </label>
 
+          {/* Search */}
+
           <div className="mt-3">
             <div className="flex gap-3">
               <input
                 value={citySearch}
-                onChange={(e) => {
-                  setCitySearch(e.target.value);
-
-                  // If the user starts typing again,
-                  // the previous place selection should
-                  // no longer be considered active.
-                  if (placeId) {
-                    setPlaceId("");
-                  }
-
-                  setMessage("");
-                }}
+                onChange={(e) =>
+                  setCitySearch(e.target.value)
+                }
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
-                    e.preventDefault();
                     searchCity();
                   }
                 }}
@@ -570,7 +436,7 @@ export default function AddMemory() {
 
               <button
                 type="button"
-                onClick={() => searchCity()}
+                onClick={searchCity}
                 disabled={searchingCity}
                 className="rounded-2xl bg-white px-5 py-4 text-sm text-black transition hover:bg-white/80 disabled:opacity-50"
               >
@@ -580,9 +446,7 @@ export default function AddMemory() {
               </button>
             </div>
 
-            {/* ==================================
-                SEARCH RESULTS
-            ================================== */}
+            {/* Search Results */}
 
             {searchResults.length > 0 && (
               <div className="mt-3 space-y-2">
@@ -610,48 +474,9 @@ export default function AddMemory() {
                 )}
               </div>
             )}
-
-            {/* Searching indicator */}
-
-            {searchingCity &&
-              citySearch.trim() && (
-                <p className="mt-3 px-2 text-xs text-white/30">
-                  Searching places...
-                </p>
-              )}
           </div>
 
-          {/* ==================================
-              SELECTED PLACE
-          ================================== */}
-
-          {placeId && (
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
-              <div className="text-xs uppercase tracking-widest text-white/30">
-                Selected place
-              </div>
-
-              <div className="mt-2 text-white">
-                {places.find(
-                  (place) => place.id === placeId
-                )?.city ?? "Selected place"}
-                {places.find(
-                  (place) => place.id === placeId
-                )?.country
-                  ? `, ${
-                      places.find(
-                        (place) =>
-                          place.id === placeId
-                      )?.country
-                    }`
-                  : ""}
-              </div>
-            </div>
-          )}
-
-          {/* ==================================
-              EXISTING PLACES
-          ================================== */}
+          {/* Existing Places */}
 
           <div className="mt-4">
             <label className="text-xs text-white/30">
@@ -661,7 +486,7 @@ export default function AddMemory() {
             <select
               value={placeId}
               onChange={(e) =>
-                selectExistingPlace(e.target.value)
+                setPlaceId(e.target.value)
               }
               className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none"
             >
@@ -685,9 +510,7 @@ export default function AddMemory() {
           </div>
         </div>
 
-        {/* ======================================
-            TITLE
-        ====================================== */}
+        {/* TITLE */}
 
         <div className="mt-8">
           <label className="text-sm text-white/60">
@@ -704,9 +527,7 @@ export default function AddMemory() {
           />
         </div>
 
-        {/* ======================================
-            CONTENT
-        ====================================== */}
+        {/* CONTENT */}
 
         <div className="mt-8">
           <label className="text-sm text-white/60">
@@ -724,9 +545,7 @@ export default function AddMemory() {
           />
         </div>
 
-        {/* ======================================
-            PHOTOS
-        ====================================== */}
+        {/* PHOTOS */}
 
         <div className="mt-8">
           <label className="text-sm text-white/60">
@@ -793,9 +612,7 @@ export default function AddMemory() {
           )}
         </div>
 
-        {/* ======================================
-            SAVE
-        ====================================== */}
+        {/* SAVE */}
 
         <button
           type="button"
@@ -808,9 +625,7 @@ export default function AddMemory() {
             : "Save Memory"}
         </button>
 
-        {/* ======================================
-            MESSAGE
-        ====================================== */}
+        {/* MESSAGE */}
 
         {message && (
           <p className="mt-6 text-center text-sm text-white/60">
@@ -821,3 +636,4 @@ export default function AddMemory() {
     </main>
   );
 }
+
