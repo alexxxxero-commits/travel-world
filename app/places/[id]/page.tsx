@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/server";
 
 type PageProps = {
   params: Promise<{
@@ -9,7 +9,7 @@ type PageProps = {
 type Photo = {
   id: string;
   place_id: string;
-  journal_id: string;
+  journal_id: string | null;
   url: string;
   caption: string | null;
   created_at: string;
@@ -21,15 +21,49 @@ type Journal = {
   title: string;
   content: string;
   created_at: string;
+  user_id: string;
 };
 
 export default async function PlacePage({
   params,
 }: PageProps) {
+  const supabase = await createClient();
+
   const { id } = await params;
 
   // ==========================================
-  // 1. GET PLACE
+  // GET CURRENT USER
+  // ==========================================
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // ==========================================
+  // REQUIRE LOGIN
+  // ==========================================
+
+  if (!user) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-black text-white">
+        <div className="text-center">
+          <p className="text-white/40">
+            Please log in first.
+          </p>
+
+          <a
+            href="/login"
+            className="mt-5 inline-block text-sm text-white underline underline-offset-4"
+          >
+            Go to login →
+          </a>
+        </div>
+      </main>
+    );
+  }
+
+  // ==========================================
+  // GET PLACE
   // ==========================================
 
   const {
@@ -39,10 +73,41 @@ export default async function PlacePage({
     .from("places")
     .select("*")
     .eq("id", id)
+    .eq("user_id", user.id)
     .single();
 
+  if (placeError) {
+    console.error(
+      "PLACE ERROR:",
+      placeError
+    );
+  }
+
   // ==========================================
-  // 2. GET JOURNALS
+  // PLACE NOT FOUND
+  // ==========================================
+
+  if (!place) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-black text-white">
+        <div className="text-center">
+          <p className="text-white/50">
+            Place not found.
+          </p>
+
+          <a
+            href="/"
+            className="mt-5 inline-block text-sm text-white/60 underline underline-offset-4"
+          >
+            ← Back to the world
+          </a>
+        </div>
+      </main>
+    );
+  }
+
+  // ==========================================
+  // GET JOURNALS
   // ==========================================
 
   const {
@@ -52,12 +117,20 @@ export default async function PlacePage({
     .from("journals")
     .select("*")
     .eq("place_id", id)
+    .eq("user_id", user.id)
     .order("created_at", {
       ascending: false,
     });
 
+  if (journalError) {
+    console.error(
+      "JOURNAL ERROR:",
+      journalError
+    );
+  }
+
   // ==========================================
-  // 3. GET PHOTOS
+  // GET PHOTOS
   // ==========================================
 
   const {
@@ -71,46 +144,34 @@ export default async function PlacePage({
       ascending: false,
     });
 
-  // ==========================================
-  // ERROR LOGGING
-  // ==========================================
-
-  if (placeError) {
-    console.error("PLACE ERROR:", placeError);
-  }
-
-  if (journalError) {
-    console.error("JOURNAL ERROR:", journalError);
-  }
-
   if (photoError) {
-    console.error("PHOTO ERROR:", photoError);
-  }
-
-  // ==========================================
-  // PLACE NOT FOUND
-  // ==========================================
-
-  if (!place) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-black text-white">
-        <p className="text-white/50">
-          Place not found.
-        </p>
-      </main>
+    console.error(
+      "PHOTO ERROR:",
+      photoError
     );
   }
 
-  const journalList: Journal[] = journals ?? [];
-  const photoList: Photo[] = photos ?? [];
+  // ==========================================
+  // SAFE ARRAYS
+  // ==========================================
+
+  const journalList: Journal[] =
+    journals ?? [];
+
+  const photoList: Photo[] =
+    photos ?? [];
 
   // ==========================================
-  // 4. GROUP PHOTOS BY JOURNAL
+  // GROUP PHOTOS BY JOURNAL
   // ==========================================
 
   const photosByJournal =
     photoList.reduce<Record<string, Photo[]>>(
       (acc, photo) => {
+        if (!photo.journal_id) {
+          return acc;
+        }
+
         if (!acc[photo.journal_id]) {
           acc[photo.journal_id] = [];
         }
@@ -122,13 +183,14 @@ export default async function PlacePage({
       {}
     );
 
+  // ==========================================
+  // PAGE
+  // ==========================================
+
   return (
     <main className="min-h-screen bg-black text-white">
       <div className="mx-auto max-w-5xl px-6 py-20">
-
-        {/* ====================================== */}
         {/* BACK */}
-        {/* ====================================== */}
 
         <a
           href="/"
@@ -137,9 +199,7 @@ export default async function PlacePage({
           ← Back to the world
         </a>
 
-        {/* ====================================== */}
         {/* HEADER */}
-        {/* ====================================== */}
 
         <section className="mt-16">
           <p className="text-xs uppercase tracking-[0.4em] text-white/40">
@@ -161,12 +221,9 @@ export default async function PlacePage({
           )}
         </section>
 
-        {/* ====================================== */}
         {/* STATS */}
-        {/* ====================================== */}
 
         <section className="mt-12 grid grid-cols-3 gap-4">
-
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
             <p className="text-3xl font-light">
               {journalList.length}
@@ -200,16 +257,12 @@ export default async function PlacePage({
               City
             </p>
           </div>
-
         </section>
 
-        {/* ====================================== */}
         {/* PHOTO GALLERY */}
-        {/* ====================================== */}
 
         {photoList.length > 0 && (
           <section className="mt-20">
-
             <div>
               <p className="text-xs uppercase tracking-[0.4em] text-white/40">
                 Visual memories
@@ -221,7 +274,6 @@ export default async function PlacePage({
             </div>
 
             <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3">
-
               {photoList.map((photo) => (
                 <div
                   key={photo.id}
@@ -243,20 +295,14 @@ export default async function PlacePage({
                   )}
                 </div>
               ))}
-
             </div>
-
           </section>
         )}
 
-        {/* ====================================== */}
         {/* JOURNALS */}
-        {/* ====================================== */}
 
         <section className="mt-24">
-
           <div className="flex items-end justify-between">
-
             <div>
               <p className="text-xs uppercase tracking-[0.4em] text-white/40">
                 Memories
@@ -273,19 +319,13 @@ export default async function PlacePage({
             >
               + New
             </a>
-
           </div>
 
-          {/* ==================================== */}
           {/* JOURNAL LIST */}
-          {/* ==================================== */}
 
           <div className="mt-10 space-y-8">
-
             {journalList.length > 0 ? (
-
               journalList.map((journal) => {
-
                 const journalPhotos =
                   photosByJournal[journal.id] ?? [];
 
@@ -294,7 +334,6 @@ export default async function PlacePage({
                     key={journal.id}
                     className="rounded-3xl border border-white/10 bg-white/5 p-7 transition hover:bg-white/[0.08]"
                   >
-
                     {/* DATE */}
 
                     <p className="text-xs text-white/30">
@@ -320,7 +359,6 @@ export default async function PlacePage({
 
                     {journalPhotos.length > 0 && (
                       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-
                         {journalPhotos.map(
                           (photo) => (
                             <img
@@ -334,7 +372,6 @@ export default async function PlacePage({
                             />
                           )
                         )}
-
                       </div>
                     )}
 
@@ -343,15 +380,11 @@ export default async function PlacePage({
                     <p className="mt-6 whitespace-pre-line text-sm leading-8 text-white/60">
                       {journal.content}
                     </p>
-
                   </article>
                 );
               })
-
             ) : (
-
               <div className="rounded-3xl border border-dashed border-white/10 p-12 text-center">
-
                 <p className="text-white/30">
                   No memories yet.
                 </p>
@@ -362,23 +395,17 @@ export default async function PlacePage({
                 >
                   Write your first memory →
                 </a>
-
               </div>
-
             )}
-
           </div>
-
         </section>
 
-        {/* ====================================== */}
         {/* FOOTER */}
-        {/* ====================================== */}
 
         <div className="mt-24 border-t border-white/10 pt-8 text-center text-xs tracking-widest text-white/20">
-          THE WORLD OF MINE · {place.city.toUpperCase()}
+          THE WORLD OF MINE ·{" "}
+          {place.city.toUpperCase()}
         </div>
-
       </div>
     </main>
   );

@@ -2,31 +2,39 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
 
 export default function SignUp() {
   const router = useRouter();
+  const supabase = createClient();
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   async function handleSignUp() {
-    if (!username.trim() || !email.trim() || !password) {
+    if (
+      !username.trim() ||
+      !email.trim() ||
+      !password
+    ) {
       setMessage("Please fill in everything.");
       return;
     }
 
     if (username.trim().length < 3) {
-      setMessage("Username must be at least 3 characters.");
+      setMessage(
+        "Username must be at least 3 characters."
+      );
       return;
     }
 
     if (password.length < 6) {
-      setMessage("Password must be at least 6 characters.");
+      setMessage(
+        "Password must be at least 6 characters."
+      );
       return;
     }
 
@@ -45,16 +53,25 @@ export default function SignUp() {
         email: email.trim(),
         password,
 
-        // Save username inside Auth metadata.
-        // The database trigger will use this
-        // to automatically create the profile.
         options: {
-            emailRedirectTo: `${window.location.origin}/`,
+          emailRedirectTo:
+            `${window.location.origin}/auth/confirm`,
+
+          // IMPORTANT:
+          // Save username in Auth metadata.
+          // The database trigger can use this
+          // to create the profile.
+          data: {
+            username: username.trim(),
+          },
         },
       });
 
       if (authError) {
-        console.error("SIGN UP ERROR:", authError);
+        console.error(
+          "SIGN UP ERROR:",
+          authError
+        );
 
         setMessage(authError.message);
         setLoading(false);
@@ -71,7 +88,10 @@ export default function SignUp() {
       // SUCCESS
       // ==========================================
 
-      console.log("USER CREATED:", authData.user);
+      console.log(
+        "USER CREATED:",
+        authData.user
+      );
 
       setMessage(
         authData.session
@@ -81,9 +101,13 @@ export default function SignUp() {
 
       setTimeout(() => {
         router.push("/");
+        router.refresh();
       }, 1500);
     } catch (error) {
-      console.error("UNEXPECTED SIGN UP ERROR:", error);
+      console.error(
+        "UNEXPECTED SIGN UP ERROR:",
+        error
+      );
 
       setMessage(
         "Something went wrong. Please try again."
@@ -96,7 +120,6 @@ export default function SignUp() {
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <div className="mx-auto max-w-md">
-
         {/* Header */}
 
         <p className="text-sm uppercase tracking-[0.4em] text-white/40">
@@ -163,6 +186,11 @@ export default function SignUp() {
             }
             placeholder="At least 6 characters"
             autoComplete="new-password"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleSignUp();
+              }
+            }}
             className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20 focus:border-white/30"
           />
         </div>
@@ -192,7 +220,6 @@ export default function SignUp() {
 
         <p className="mt-8 text-center text-sm text-white/40">
           Already have an account?{" "}
-
           <button
             type="button"
             onClick={() =>

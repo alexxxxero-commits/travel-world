@@ -1,13 +1,13 @@
 import Globe from "@/components/Globe";
 import UserMenu from "@/components/UserMenu";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function Home() {
   // ==========================================
   // 1. CREATE SERVER SUPABASE CLIENT
   // ==========================================
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createClient();
 
   // ==========================================
   // 2. GET CURRENT USER
@@ -15,7 +15,11 @@ export default async function Home() {
 
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
+
+  console.log("HOME USER:", user);
+  console.log("HOME USER ERROR:", userError);
 
   // ==========================================
   // 3. LOAD USER'S PLACES
@@ -24,17 +28,17 @@ export default async function Home() {
   let places: any[] = [];
 
   if (user) {
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await supabase
       .from("places")
       .select("*")
       .eq("user_id", user.id)
       .order("city");
 
     if (error) {
-      console.error(
-        "SUPABASE PLACES ERROR:",
-        error
-      );
+      console.error("SUPABASE PLACES ERROR:", error);
     } else {
       places = data ?? [];
     }
@@ -47,7 +51,10 @@ export default async function Home() {
   let journals: any[] = [];
 
   if (user) {
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await supabase
       .from("journals")
       .select("*")
       .eq("user_id", user.id)
@@ -56,10 +63,7 @@ export default async function Home() {
       });
 
     if (error) {
-      console.error(
-        "SUPABASE JOURNALS ERROR:",
-        error
-      );
+      console.error("SUPABASE JOURNALS ERROR:", error);
     } else {
       journals = data ?? [];
     }
@@ -69,16 +73,13 @@ export default async function Home() {
   // 5. CONNECT JOURNALS TO PLACES
   // ==========================================
 
-  const placesWithJournals = places.map(
-    (place) => ({
-      ...place,
+  const placesWithJournals = places.map((place) => ({
+    ...place,
 
-      journals: journals.filter(
-        (journal) =>
-          journal.place_id === place.id
-      ),
-    })
-  );
+    journals: journals.filter(
+      (journal) => journal.place_id === place.id
+    ),
+  }));
 
   // ==========================================
   // 6. CALCULATE STATS
@@ -98,20 +99,15 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-black text-white">
-
-      {/* ==========================================
-          TOP RIGHT USER MENU
-      ========================================== */}
+      {/* USER MENU */}
 
       <UserMenu />
 
-      {/* ==========================================
-          MAIN CONTENT
-      ========================================== */}
+      {/* MAIN CONTENT */}
 
       <div className="flex min-h-screen flex-col items-center px-6 py-20">
 
-        {/* Header */}
+        {/* HEADER */}
 
         <p className="mb-6 text-sm uppercase tracking-[0.4em] text-white/50">
           My personal travel journal
@@ -125,17 +121,17 @@ export default async function Home() {
           A safe space of places, people and memories.
         </p>
 
-        {/* Globe */}
+        {/* GLOBE */}
 
         <div className="my-10 flex w-full justify-center">
           <Globe places={placesWithJournals} />
         </div>
 
-        {/* Stats */}
+        {/* STATS */}
 
         <div className="flex justify-center gap-12 text-center text-sm text-white/50">
 
-          {/* Countries */}
+          {/* COUNTRIES */}
 
           <div>
             <p className="text-3xl font-light text-white">
@@ -149,7 +145,7 @@ export default async function Home() {
             </p>
           </div>
 
-          {/* Cities */}
+          {/* CITIES */}
 
           <div>
             <p className="text-3xl font-light text-white">
@@ -163,7 +159,7 @@ export default async function Home() {
             </p>
           </div>
 
-          {/* Memories */}
+          {/* MEMORIES */}
 
           <div>
             <p className="text-3xl font-light text-white">
@@ -179,7 +175,7 @@ export default async function Home() {
 
         </div>
 
-        {/* Add Memory */}
+        {/* ADD MEMORY */}
 
         {user && (
           <a

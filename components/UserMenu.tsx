@@ -4,23 +4,18 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-type Profile = {
-  username: string;
-};
-
 export default function UserMenu() {
   const router = useRouter();
   const supabase = createClient();
 
-  const [username, setUsername] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [username, setUsername] =
+    useState<string | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
 
   async function loadUser() {
     setLoading(true);
-
-    // ==========================================
-    // 1. GET CURRENT USER
-    // ==========================================
 
     const {
       data: { user },
@@ -28,24 +23,26 @@ export default function UserMenu() {
     } = await supabase.auth.getUser();
 
     if (userError) {
-      console.error("GET USER ERROR:", userError);
+      console.error(
+        "GET USER ERROR:",
+        userError
+      );
+
       setUsername(null);
       setLoading(false);
       return;
     }
 
-    // No logged-in user
     if (!user) {
       setUsername(null);
       setLoading(false);
       return;
     }
 
-    console.log("CURRENT USER:", user);
-
-    // ==========================================
-    // 2. GET PROFILE
-    // ==========================================
+    console.log(
+      "CURRENT USER:",
+      user
+    );
 
     const {
       data: profile,
@@ -67,25 +64,15 @@ export default function UserMenu() {
       return;
     }
 
-    if (profile) {
-      console.log("CURRENT PROFILE:", profile);
-
-      setUsername(profile.username);
-    }
+    setUsername(
+      profile?.username ?? null
+    );
 
     setLoading(false);
   }
 
-  // ==========================================
-  // LOAD USER ON PAGE LOAD
-  // ==========================================
-
   useEffect(() => {
     loadUser();
-
-    // ==========================================
-    // LISTEN FOR LOGIN / LOGOUT
-    // ==========================================
 
     const {
       data: { subscription },
@@ -119,20 +106,16 @@ export default function UserMenu() {
           return;
         }
 
-        if (profile) {
-          setUsername(profile.username);
-        }
+        setUsername(
+          profile?.username ?? null
+        );
       }
     );
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
-
-  // ==========================================
-  // LOGOUT
-  // ==========================================
+  }, [supabase]);
 
   async function handleLogout() {
     setLoading(true);
@@ -156,17 +139,9 @@ export default function UserMenu() {
     router.refresh();
   }
 
-  // ==========================================
-  // LOADING
-  // ==========================================
-
   if (loading) {
     return null;
   }
-
-  // ==========================================
-  // NOT LOGGED IN
-  // ==========================================
 
   if (!username) {
     return (
@@ -183,10 +158,6 @@ export default function UserMenu() {
       </div>
     );
   }
-
-  // ==========================================
-  // LOGGED IN
-  // ==========================================
 
   return (
     <div className="fixed right-6 top-6 z-50 flex items-center gap-3">

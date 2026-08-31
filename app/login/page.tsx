@@ -10,7 +10,6 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -24,10 +23,6 @@ export default function Login() {
     setMessage("");
 
     try {
-      // ==========================================
-      // LOGIN
-      // ==========================================
-
       const {
         data,
         error,
@@ -38,25 +33,21 @@ export default function Login() {
 
       if (error) {
         console.error("LOGIN ERROR:", error);
-
         setMessage(error.message);
         setLoading(false);
-
         return;
       }
 
       if (!data.user) {
         setMessage("Could not log in.");
         setLoading(false);
-
         return;
       }
 
-      // ==========================================
-      // SUCCESS
-      // ==========================================
-
-      console.log("LOGGED IN USER:", data.user);
+      console.log(
+        "LOGGED IN USER:",
+        data.user
+      );
 
       setMessage("Welcome back ✨");
 
@@ -64,7 +55,6 @@ export default function Login() {
         router.push("/");
         router.refresh();
       }, 700);
-
     } catch (error) {
       console.error(
         "UNEXPECTED LOGIN ERROR:",
@@ -82,9 +72,6 @@ export default function Login() {
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <div className="mx-auto max-w-md">
-
-        {/* Header */}
-
         <p className="text-sm uppercase tracking-[0.4em] text-white/40">
           The World Of Mine
         </p>
@@ -165,7 +152,6 @@ export default function Login() {
 
         <p className="mt-8 text-center text-sm text-white/40">
           Don't have an account?{" "}
-
           <button
             type="button"
             onClick={() =>
@@ -176,7 +162,6 @@ export default function Login() {
             Sign up
           </button>
         </p>
-
       </div>
     </main>
   );

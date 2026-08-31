@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 type Place = {
   id: string;
@@ -19,16 +20,17 @@ type SearchResult = {
 };
 
 export default function AddMemory() {
+  const supabase = createClient();
+  const router = useRouter();
+
   const [places, setPlaces] = useState<Place[]>([]);
   const [placeId, setPlaceId] = useState("");
   const [citySearch, setCitySearch] = useState("");
   const [searchingCity, setSearchingCity] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
-
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -63,7 +65,7 @@ export default function AddMemory() {
     }
 
     loadPlaces();
-  }, []);
+  }, [supabase]);
 
   // ==========================================
   // 2. SEARCH CITY
@@ -77,11 +79,14 @@ export default function AddMemory() {
     setMessage("");
 
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q=${encodeURIComponent(
-          citySearch.trim()
-        )}`
-      );
+      const url =
+        `https://nominatim.openstreetmap.org/search` +
+        `?format=jsonv2` +
+        `&addressdetails=1` +
+        `&limit=5` +
+        `&q=${encodeURIComponent(citySearch.trim())}`;
+
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error("City search failed");
@@ -98,8 +103,11 @@ export default function AddMemory() {
             item.address?.village ||
             item.display_name?.split(",")[0] ||
             "",
+
           country: item.address?.country || "",
+
           latitude: Number(item.lat),
+
           longitude: Number(item.lon),
         }))
         .filter(
@@ -130,7 +138,6 @@ export default function AddMemory() {
   async function selectSearchResult(result: SearchResult) {
     setMessage("");
 
-    // Get current user
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -140,7 +147,7 @@ export default function AddMemory() {
       return;
     }
 
-    // Check if this place already exists for this user
+    // Check if place already exists
     const existingPlace = places.find(
       (place) =>
         place.city.toLowerCase() === result.city.toLowerCase() &&
@@ -159,7 +166,7 @@ export default function AddMemory() {
       return;
     }
 
-    // Create new place in Supabase
+    // Create new place
     const { data, error } = await supabase
       .from("places")
       .insert({
@@ -184,13 +191,10 @@ export default function AddMemory() {
       return;
     }
 
-    // Add new place to local state
     setPlaces((current) => [...current, data]);
 
-    // Automatically select it
     setPlaceId(data.id);
 
-    // Clear search
     setCitySearch("");
     setSearchResults([]);
 
@@ -210,7 +214,6 @@ export default function AddMemory() {
     setSaving(true);
     setMessage("");
 
-    // Get current user
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -266,13 +269,13 @@ export default function AddMemory() {
       const extension =
         photo.name.split(".").pop()?.toLowerCase() || "jpg";
 
-      const uniqueName = `${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.${extension}`;
+      const uniqueName =
+        `${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}.${extension}`;
 
-      // IMPORTANT:
-      // Each user's photos go into their own folder
-      const filePath = `journals/${user.id}/${uniqueName}`;
+      const filePath =
+        `journals/${user.id}/${uniqueName}`;
 
       const {
         data: uploadData,
@@ -380,6 +383,11 @@ export default function AddMemory() {
     );
 
     setSaving(false);
+    // Return to homepage after saving
+    setTimeout(() => {
+      router.push("/");
+      router.refresh();
+    }, 700);
   }
 
   // ==========================================
@@ -389,9 +397,6 @@ export default function AddMemory() {
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <div className="mx-auto max-w-xl">
-
-        {/* Header */}
-
         <p className="text-sm uppercase tracking-[0.4em] text-white/40">
           The World Of Mine
         </p>
@@ -404,18 +409,17 @@ export default function AddMemory() {
           Save a little piece of your journey.
         </p>
 
-        {/* Place */}
+        {/* PLACE */}
 
         <div className="mt-12">
           <label className="text-sm text-white/60">
             Place
           </label>
 
-          {/* Search city */}
+          {/* Search */}
 
           <div className="mt-3">
             <div className="flex gap-3">
-
               <input
                 value={citySearch}
                 onChange={(e) =>
@@ -440,14 +444,12 @@ export default function AddMemory() {
                   ? "Searching..."
                   : "Search"}
               </button>
-
             </div>
 
-            {/* Search results */}
+            {/* Search Results */}
 
             {searchResults.length > 0 && (
               <div className="mt-3 space-y-2">
-
                 {searchResults.map(
                   (result, index) => (
                     <button
@@ -470,16 +472,13 @@ export default function AddMemory() {
                     </button>
                   )
                 )}
-
               </div>
             )}
-
           </div>
 
-          {/* Existing places */}
+          {/* Existing Places */}
 
           <div className="mt-4">
-
             <label className="text-xs text-white/30">
               Or choose an existing place
             </label>
@@ -507,17 +506,13 @@ export default function AddMemory() {
                   {place.city}, {place.country}
                 </option>
               ))}
-
             </select>
-
           </div>
-
         </div>
 
-        {/* Title */}
+        {/* TITLE */}
 
         <div className="mt-8">
-
           <label className="text-sm text-white/60">
             Title
           </label>
@@ -530,13 +525,11 @@ export default function AddMemory() {
             placeholder="My first day in Santiago..."
             className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
           />
-
         </div>
 
-        {/* Content */}
+        {/* CONTENT */}
 
         <div className="mt-8">
-
           <label className="text-sm text-white/60">
             Your story
           </label>
@@ -550,19 +543,16 @@ export default function AddMemory() {
             rows={8}
             className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
           />
-
         </div>
 
-        {/* Photos */}
+        {/* PHOTOS */}
 
         <div className="mt-8">
-
           <label className="text-sm text-white/60">
             Photos
           </label>
 
           <label className="mt-3 flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-white/20 bg-white/5 px-6 py-10 text-center transition hover:bg-white/10">
-
             <span className="text-3xl">
               📷
             </span>
@@ -570,9 +560,7 @@ export default function AddMemory() {
             <span className="mt-3 text-sm text-white/60">
               {photos.length > 0
                 ? `${photos.length} photo${
-                    photos.length > 1
-                      ? "s"
-                      : ""
+                    photos.length > 1 ? "s" : ""
                   } selected`
                 : "Add photos"}
             </span>
@@ -590,52 +578,44 @@ export default function AddMemory() {
                 setPhotos(files);
               }}
             />
-
           </label>
 
-          {/* Selected photos */}
+          {/* Selected Photos */}
 
           {photos.length > 0 && (
             <div className="mt-4 space-y-2">
+              {photos.map((photo, index) => (
+                <div
+                  key={`${photo.name}-${index}`}
+                  className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3"
+                >
+                  <span className="truncate text-sm text-white/60">
+                    {photo.name}
+                  </span>
 
-              {photos.map(
-                (photo, index) => (
-                  <div
-                    key={`${photo.name}-${index}`}
-                    className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhotos(
+                        photos.filter(
+                          (_, i) => i !== index
+                        )
+                      );
+                    }}
+                    className="ml-4 text-white/40 transition hover:text-white"
                   >
-
-                    <span className="truncate text-sm text-white/60">
-                      {photo.name}
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPhotos(
-                          photos.filter(
-                            (_, i) =>
-                              i !== index
-                          )
-                        );
-                      }}
-                      className="ml-4 text-white/40 transition hover:text-white"
-                    >
-                      ×
-                    </button>
-
-                  </div>
-                )
-              )}
-
+                    ×
+                  </button>
+                </div>
+              ))}
             </div>
           )}
-
         </div>
 
-        {/* Save */}
+        {/* SAVE */}
 
         <button
+          type="button"
           onClick={saveMemory}
           disabled={saving}
           className="mt-8 w-full rounded-full bg-white px-6 py-4 text-sm uppercase tracking-widest text-black transition hover:bg-white/80 disabled:opacity-50"
@@ -645,14 +625,13 @@ export default function AddMemory() {
             : "Save Memory"}
         </button>
 
-        {/* Message */}
+        {/* MESSAGE */}
 
         {message && (
           <p className="mt-6 text-center text-sm text-white/60">
             {message}
           </p>
         )}
-
       </div>
     </main>
   );
