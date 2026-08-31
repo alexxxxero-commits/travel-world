@@ -19,6 +19,27 @@ type SearchResult = {
   longitude: number;
 };
 
+type NominatimResult = {
+  lat: string;
+  lon: string;
+  display_name?: string;
+  address?: {
+    city?: string;
+    town?: string;
+    municipality?: string;
+    village?: string;
+    county?: string;
+    state?: string;
+    country?: string;
+  };
+  namedetails?: {
+    name?: string;
+    "name:en"?: string;
+    "name:zh"?: string;
+    "name:es"?: string;
+  };
+};
+
 export default function AddMemory() {
   const supabase = createClient();
   const router = useRouter();
@@ -28,7 +49,7 @@ export default function AddMemory() {
   // Existing place selected from database
   const [placeId, setPlaceId] = useState("");
 
-  // New place selected from search, but NOT saved to database yet
+  // Temporary search result
   const [selectedSearchPlace, setSelectedSearchPlace] =
     useState<SearchResult | null>(null);
 
@@ -44,7 +65,7 @@ export default function AddMemory() {
   const [message, setMessage] = useState("");
 
   // ==========================================
-  // HELPER: CALCULATE DISTANCE BETWEEN PLACES
+  // DISTANCE
   // ==========================================
 
   function distanceBetweenPlaces(
@@ -53,8 +74,7 @@ export default function AddMemory() {
     lat2: number,
     lon2: number
   ) {
-    const toRad = (value: number) =>
-      (value * Math.PI) / 180;
+    const toRad = (value: number) => (value * Math.PI) / 180;
 
     const R = 6371;
 
@@ -74,7 +94,128 @@ export default function AddMemory() {
   }
 
   // ==========================================
-  // 1. LOAD EXISTING PLACES
+  // NORMALIZE CITY NAME
+  // ==========================================
+  //
+  // We ALWAYS prefer English.
+  //
+  // Example:
+  //
+  // 北京 -> Beijing
+  // 圣地亚哥 -> Santiago
+  //
+  // ==========================================
+
+  function getEnglishCity(item: NominatimResult): string {
+    const address = item.address;
+    const names = item.namedetails;
+
+    // Best option: explicit English name
+    if (names?.["name:en"]) {
+      return names["name:en"];
+    }
+
+    // Nominatim sometimes already returns English
+    const city =
+      address?.city ||
+      address?.town ||
+      address?.municipality ||
+      address?.village ||
+      "";
+
+    // Common Chinese cities.
+    // This also guarantees Chinese searches produce
+    // clean English output.
+
+    const chineseCityMap: Record<string, string> = {
+      北京: "Beijing",
+      上海: "Shanghai",
+      南京: "Nanjing",
+      杭州: "Hangzhou",
+      苏州: "Suzhou",
+      成都: "Chengdu",
+      重庆: "Chongqing",
+      西安: "Xi'an",
+      武汉: "Wuhan",
+      广州: "Guangzhou",
+      深圳: "Shenzhen",
+      天津: "Tianjin",
+      厦门: "Xiamen",
+      青岛: "Qingdao",
+      大连: "Dalian",
+      沈阳: "Shenyang",
+      长沙: "Changsha",
+      郑州: "Zhengzhou",
+      济南: "Jinan",
+      福州: "Fuzhou",
+      昆明: "Kunming",
+      哈尔滨: "Harbin",
+      台北: "Taipei",
+      高雄: "Kaohsiung",
+      澳门: "Macau",
+      香港: "Hong Kong",
+    };
+
+    if (chineseCityMap[city]) {
+      return chineseCityMap[city];
+    }
+
+    return city;
+  }
+
+  // ==========================================
+  // NORMALIZE COUNTRY NAME
+  // ==========================================
+  //
+  // Always use English country names.
+  //
+  // ==========================================
+
+  function getEnglishCountry(item: NominatimResult): string {
+    const country = item.address?.country || "";
+
+    const countryMap: Record<string, string> = {
+      中国: "China",
+      台湾: "Taiwan",
+      智利: "Chile",
+      美国: "United States",
+      英国: "United Kingdom",
+      法国: "France",
+      德国: "Germany",
+      西班牙: "Spain",
+      意大利: "Italy",
+      葡萄牙: "Portugal",
+      日本: "Japan",
+      韩国: "South Korea",
+      泰国: "Thailand",
+      越南: "Vietnam",
+      新加坡: "Singapore",
+      澳大利亚: "Australia",
+      加拿大: "Canada",
+      墨西哥: "Mexico",
+      阿根廷: "Argentina",
+      巴西: "Brazil",
+      秘鲁: "Peru",
+      玻利维亚: "Bolivia",
+      哥伦比亚: "Colombia",
+      委内瑞拉: "Venezuela",
+      乌拉圭: "Uruguay",
+      巴拉圭: "Paraguay",
+      厄瓜多尔: "Ecuador",
+      古巴: "Cuba",
+      摩洛哥: "Morocco",
+      印度: "India",
+    };
+
+    if (countryMap[country]) {
+      return countryMap[country];
+    }
+
+    return country;
+  }
+
+  // ==========================================
+  // LOAD EXISTING PLACES
   // ==========================================
 
   useEffect(() => {
@@ -88,16 +229,53 @@ export default function AddMemory() {
         return;
       }
 
+      // Only load places that have journals.
+      const { data: journals, error: journalsError } =
+        await supabase
+          .from("journals")
+          .select("place_id")
+          .eq("user_id", user.id);
+
+      if (journalsError) {
+        console.error(
+          "LOAD JOURNALS ERROR:",
+          journalsError
+        );
+
+        setMessage(
+          `Could not load memories: ${journalsError.message}`
+        );
+
+        return;
+      }
+
+      const placeIds = Array.from(
+        new Set(
+          (journals ?? [])
+            .map((journal) => journal.place_id)
+            .filter(Boolean)
+        )
+      );
+
+      if (placeIds.length === 0) {
+        setPlaces([]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("places")
         .select(
           "id, city, country, latitude, longitude"
         )
         .eq("user_id", user.id)
+        .in("id", placeIds)
         .order("city");
 
       if (error) {
-        console.error("LOAD PLACES ERROR:", error);
+        console.error(
+          "LOAD PLACES ERROR:",
+          error
+        );
 
         setMessage(
           `Could not load places: ${error.message}`
@@ -113,57 +291,78 @@ export default function AddMemory() {
   }, [supabase]);
 
   // ==========================================
-  // 2. SEARCH CITY
+  // SEARCH CITY
+  // ==========================================
+  //
+  // IMPORTANT:
+  //
+  // This is now designed to work with
+  // automatic search.
+  //
+  // Example:
+  //
+  // "b"      -> recommendations
+  // "bei"    -> Beijing
+  // "北"     -> Beijing
+  // "sant"   -> Santiago
+  //
   // ==========================================
 
-  async function searchCity() {
-    if (!citySearch.trim()) return;
+  async function searchCity(query?: string) {
+    const searchText =
+      query !== undefined
+        ? query.trim()
+        : citySearch.trim();
+
+    if (!searchText) {
+      setSearchResults([]);
+      return;
+    }
 
     setSearchingCity(true);
-    setSearchResults([]);
-    setMessage("");
 
     try {
       const url =
-        `https://nominatim.openstreetmap.org/search` +
+        "https://nominatim.openstreetmap.org/search" +
         `?format=jsonv2` +
         `&addressdetails=1` +
-        `&limit=5` +
-        `&q=${encodeURIComponent(citySearch.trim())}`;
+        `&namedetails=1` +
+        `&accept-language=en` +
+        `&limit=10` +
+        `&q=${encodeURIComponent(searchText)}`;
 
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
 
       if (!response.ok) {
         throw new Error("City search failed");
       }
 
-      const data = await response.json();
+      const data: NominatimResult[] =
+        await response.json();
 
       const results: SearchResult[] = data
-        .map((item: any) => ({
-          city:
-            item.address?.city ||
-            item.address?.town ||
-            item.address?.municipality ||
-            item.address?.village ||
-            item.display_name?.split(",")[0] ||
-            "",
-
-          country: item.address?.country || "",
-
+        .map((item) => ({
+          city: getEnglishCity(item),
+          country: getEnglishCountry(item),
           latitude: Number(item.lat),
-
           longitude: Number(item.lon),
         }))
         .filter(
-          (item: SearchResult) =>
+          (item) =>
             item.city &&
             item.country &&
             !Number.isNaN(item.latitude) &&
             !Number.isNaN(item.longitude)
         );
 
-      // Remove duplicate search results
+      // ==========================================
+      // REMOVE DUPLICATES
+      // ==========================================
+
       const uniqueResults = results.filter(
         (result, index, array) =>
           index ===
@@ -176,14 +375,90 @@ export default function AddMemory() {
           )
       );
 
-      setSearchResults(uniqueResults);
+      // ==========================================
+      // SORT:
+      //
+      // Existing places first
+      //
+      // This makes your existing Santiago
+      // appear before creating another Santiago.
+      // ==========================================
 
-      if (uniqueResults.length === 0) {
+      const sortedResults = [...uniqueResults].sort(
+        (a, b) => {
+          const aExisting = places.some((place) => {
+            const sameName =
+              place.city.toLowerCase() ===
+                a.city.toLowerCase() &&
+              place.country.toLowerCase() ===
+                a.country.toLowerCase();
+
+            if (sameName) return true;
+
+            if (
+              place.latitude === undefined ||
+              place.longitude === undefined
+            ) {
+              return false;
+            }
+
+            return (
+              distanceBetweenPlaces(
+                place.latitude,
+                place.longitude,
+                a.latitude,
+                a.longitude
+              ) < 20
+            );
+          });
+
+          const bExisting = places.some((place) => {
+            const sameName =
+              place.city.toLowerCase() ===
+                b.city.toLowerCase() &&
+              place.country.toLowerCase() ===
+                b.country.toLowerCase();
+
+            if (sameName) return true;
+
+            if (
+              place.latitude === undefined ||
+              place.longitude === undefined
+            ) {
+              return false;
+            }
+
+            return (
+              distanceBetweenPlaces(
+                place.latitude,
+                place.longitude,
+                b.latitude,
+                b.longitude
+              ) < 20
+            );
+          });
+
+          if (aExisting && !bExisting) return -1;
+          if (!aExisting && bExisting) return 1;
+
+          return a.city.localeCompare(b.city);
+        }
+      );
+
+      setSearchResults(sortedResults);
+
+      if (sortedResults.length === 0) {
         setMessage("No places found.");
+      } else {
+        setMessage("");
       }
     } catch (error) {
-      console.error("CITY SEARCH ERROR:", error);
+      console.error(
+        "CITY SEARCH ERROR:",
+        error
+      );
 
+      setSearchResults([]);
       setMessage("Could not find that place.");
     } finally {
       setSearchingCity(false);
@@ -191,31 +466,49 @@ export default function AddMemory() {
   }
 
   // ==========================================
-  // 3. SELECT SEARCH RESULT
-  // IMPORTANT:
-  // DO NOT CREATE A PLACE HERE
+  // LIVE SEARCH
+  // ==========================================
+  //
+  // THIS is the important new part.
+  //
+  // Every time the user types:
+  //
+  // 北
+  // 北 -> automatically search
+  //
+  // 北京
+  // 北京 -> automatically search
+  //
   // ==========================================
 
-  function selectSearchResult(result: SearchResult) {
+  useEffect(() => {
+    const query = citySearch.trim();
+
+    if (!query) {
+      setSearchResults([]);
+      setSearchingCity(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      searchCity(query);
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [citySearch]);
+
+  // ==========================================
+  // SELECT SEARCH RESULT
+  // ==========================================
+
+  function selectSearchResult(
+    result: SearchResult
+  ) {
     setMessage("");
 
-    /*
-     * First check whether this search result matches
-     * an existing place.
-     *
-     * We use both:
-     *
-     * 1. city + country
-     * 2. geographic distance
-     *
-     * The distance check helps prevent:
-     *
-     * Nanjing
-     * 南京
-     *
-     * from becoming two different places.
-     */
-
+    // Check existing places first.
     const existingPlace = places.find((place) => {
       const sameName =
         place.city.toLowerCase() ===
@@ -234,28 +527,24 @@ export default function AddMemory() {
         return false;
       }
 
-      const distance = distanceBetweenPlaces(
-        place.latitude,
-        place.longitude,
-        result.latitude,
-        result.longitude
-      );
+      const distance =
+        distanceBetweenPlaces(
+          place.latitude,
+          place.longitude,
+          result.latitude,
+          result.longitude
+        );
 
-      /*
-       * Less than 20 km = treat as the same place.
-       *
-       * This is especially useful for:
-       * Nanjing / 南京
-       * Santiago / Santiago de Chile
-       * Beijing / 北京
-       */
       return distance < 20;
     });
+
+    // ==========================================
+    // EXISTING PLACE
+    // ==========================================
 
     if (existingPlace) {
       setPlaceId(existingPlace.id);
       setSelectedSearchPlace(null);
-
       setCitySearch("");
       setSearchResults([]);
 
@@ -266,18 +555,12 @@ export default function AddMemory() {
       return;
     }
 
-    /*
-     * This is a NEW place.
-     *
-     * We only store it in React state.
-     *
-     * NOTHING is inserted into Supabase yet.
-     */
+    // ==========================================
+    // NEW PLACE
+    // ==========================================
 
     setPlaceId("");
-
     setSelectedSearchPlace(result);
-
     setCitySearch("");
     setSearchResults([]);
 
@@ -287,14 +570,10 @@ export default function AddMemory() {
   }
 
   // ==========================================
-  // 4. SAVE JOURNAL + PHOTOS
+  // SAVE MEMORY
   // ==========================================
 
   async function saveMemory() {
-    // ==========================================
-    // VALIDATION
-    // ==========================================
-
     const missingFields: string[] = [];
 
     if (!placeId && !selectedSearchPlace) {
@@ -341,29 +620,19 @@ export default function AddMemory() {
     let finalPlaceId = placeId;
     let createdNewPlace = false;
 
-    /*
-     * If user selected an existing place,
-     * use it directly.
-     */
-
     if (!finalPlaceId && selectedSearchPlace) {
       const result = selectedSearchPlace;
 
-      /*
-       * Before creating a new place, check the database
-       * again.
-       *
-       * This protects against duplicates if the user
-       * searched for the same city in another language.
-       */
-
-      const { data: existingPlaces, error: placesError } =
-        await supabase
-          .from("places")
-          .select(
-            "id, city, country, latitude, longitude"
-          )
-          .eq("user_id", user.id);
+      // Re-check database.
+      const {
+        data: existingPlaces,
+        error: placesError,
+      } = await supabase
+        .from("places")
+        .select(
+          "id, city, country, latitude, longitude"
+        )
+        .eq("user_id", user.id);
 
       if (placesError) {
         console.error(
@@ -399,61 +668,58 @@ export default function AddMemory() {
           return false;
         }
 
-        const distance = distanceBetweenPlaces(
-          place.latitude,
-          place.longitude,
-          result.latitude,
-          result.longitude
-        );
+        const distance =
+          distanceBetweenPlaces(
+            place.latitude,
+            place.longitude,
+            result.latitude,
+            result.longitude
+          );
 
         return distance < 20;
       });
 
-      if (existingPlace) {
-        /*
-         * Reuse existing place.
-         */
+      // ==========================================
+      // REUSE EXISTING PLACE
+      // ==========================================
 
+      if (existingPlace) {
         finalPlaceId = existingPlace.id;
 
         setPlaceId(existingPlace.id);
 
         setPlaces((current) => {
-          const alreadyExists = current.some(
-            (place) =>
-              place.id === existingPlace.id
-          );
+          const alreadyExists =
+            current.some(
+              (place) =>
+                place.id === existingPlace.id
+            );
 
           return alreadyExists
             ? current
             : [...current, existingPlace];
         });
-      } else {
-        /*
-         * NEW PLACE
-         *
-         * This is the ONLY point where we create
-         * a row in the places table.
-         *
-         * Therefore:
-         *
-         * SEARCH ≠ CREATE PLACE
-         *
-         * SAVE MEMORY = CREATE PLACE
-         */
+      }
 
-        const { data: newPlace, error: placeError } =
-          await supabase
-            .from("places")
-            .insert({
-              user_id: user.id,
-              city: result.city,
-              country: result.country,
-              latitude: result.latitude,
-              longitude: result.longitude,
-            })
-            .select()
-            .single();
+      // ==========================================
+      // CREATE NEW PLACE
+      // ==========================================
+
+      else {
+        const {
+          data: newPlace,
+          error: placeError,
+        } = await supabase
+          .from("places")
+          .insert({
+            user_id: user.id,
+            city: result.city,
+            country: result.country,
+            latitude: result.latitude,
+            longitude: result.longitude,
+          })
+          .select()
+          .single();
 
         if (placeError || !newPlace) {
           console.error(
@@ -512,26 +778,23 @@ export default function AddMemory() {
       .select()
       .single();
 
+    // ==========================================
+    // JOURNAL FAILED
+    // ==========================================
+
     if (journalError || !journal) {
       console.error(
         "JOURNAL ERROR:",
         journalError
       );
 
-      /*
-       * If this was a brand-new place and the journal
-       * failed, remove the place again.
-       *
-       * This prevents an empty/orphan place from being
-       * left in the database.
-       */
-
       if (createdNewPlace) {
-        const { error: deletePlaceError } =
-          await supabase
-            .from("places")
-            .delete()
-            .eq("id", finalPlaceId);
+        const {
+          error: deletePlaceError,
+        } = await supabase
+          .from("places")
+          .delete()
+          .eq("id", finalPlaceId);
 
         if (deletePlaceError) {
           console.error(
@@ -573,8 +836,10 @@ export default function AddMemory() {
 
     for (const photo of photos) {
       const extension =
-        photo.name.split(".").pop()?.toLowerCase() ||
-        "jpg";
+        photo.name
+          .split(".")
+          .pop()
+          ?.toLowerCase() || "jpg";
 
       const uniqueName =
         `${Date.now()}-${Math.random()
@@ -601,15 +866,13 @@ export default function AddMemory() {
           uploadError
         );
 
-        /*
-         * Clean up already uploaded files.
-         */
-
+        // Remove already uploaded files
         if (uploadedFilePaths.length > 0) {
-          const { error: removeError } =
-            await supabase.storage
-              .from("photos")
-              .remove(uploadedFilePaths);
+          const {
+            error: removeError,
+          } = await supabase.storage
+            .from("photos")
+            .remove(uploadedFilePaths);
 
           if (removeError) {
             console.error(
@@ -619,20 +882,13 @@ export default function AddMemory() {
           }
         }
 
-        /*
-         * Delete journal because memory wasn't
-         * successfully saved.
-         */
-
+        // Delete journal
         await supabase
           .from("journals")
           .delete()
           .eq("id", journal.id);
 
-        /*
-         * Delete newly created place.
-         */
-
+        // Delete new place
         if (createdNewPlace) {
           await supabase
             .from("places")
@@ -663,7 +919,7 @@ export default function AddMemory() {
       uploadedFilePaths.push(filePath);
 
       // ==========================================
-      // CREATE PUBLIC URL
+      // PUBLIC URL
       // ==========================================
 
       const {
@@ -710,15 +966,13 @@ export default function AddMemory() {
           photoError
         );
 
-        /*
-         * Remove uploaded files.
-         */
-
+        // Remove uploaded files
         if (uploadedFilePaths.length > 0) {
-          const { error: removeError } =
-            await supabase.storage
-              .from("photos")
-              .remove(uploadedFilePaths);
+          const {
+            error: removeError,
+          } = await supabase.storage
+            .from("photos")
+            .remove(uploadedFilePaths);
 
           if (removeError) {
             console.error(
@@ -728,19 +982,13 @@ export default function AddMemory() {
           }
         }
 
-        /*
-         * Delete journal.
-         */
-
+        // Delete journal
         await supabase
           .from("journals")
           .delete()
           .eq("id", journal.id);
 
-        /*
-         * Delete newly created place.
-         */
-
+        // Delete new place
         if (createdNewPlace) {
           await supabase
             .from("places")
@@ -784,14 +1032,15 @@ export default function AddMemory() {
     setMessage(
       photos.length > 0
         ? `Memory saved ✨ ${photos.length} photo${
-            photos.length > 1 ? "s" : ""
+            photos.length > 1
+              ? "s"
+              : ""
           } added.`
         : "Memory saved ✨"
     );
 
     setSaving(false);
 
-    // Return to homepage
     setTimeout(() => {
       router.push("/");
       router.refresh();
@@ -839,11 +1088,7 @@ export default function AddMemory() {
                 onChange={(e) => {
                   setCitySearch(e.target.value);
 
-                  /*
-                   * If user starts typing again,
-                   * remove previous temporary selection.
-                   */
-
+                  // Typing cancels previous selection
                   if (selectedSearchPlace) {
                     setSelectedSearchPlace(null);
                   }
@@ -852,13 +1097,7 @@ export default function AddMemory() {
                     setPlaceId("");
                   }
 
-                  setSearchResults([]);
                   setMessage("");
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    searchCity();
-                  }
                 }}
                 placeholder="Search for a city..."
                 className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
@@ -866,7 +1105,7 @@ export default function AddMemory() {
 
               <button
                 type="button"
-                onClick={searchCity}
+                onClick={() => searchCity()}
                 disabled={
                   searchingCity ||
                   !citySearch.trim()
@@ -874,7 +1113,7 @@ export default function AddMemory() {
                 className="rounded-2xl bg-white px-5 py-4 text-sm text-black transition hover:bg-white/80 disabled:opacity-50"
               >
                 {searchingCity
-                  ? "Searching..."
+                  ? "..."
                   : "Search"}
               </button>
 
@@ -915,9 +1154,7 @@ export default function AddMemory() {
 
           </div>
 
-          {/* ==========================================
-              CURRENTLY SELECTED SEARCH PLACE
-          ========================================== */}
+          {/* SELECTED SEARCH PLACE */}
 
           {selectedSearchPlace && (
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
@@ -932,8 +1169,9 @@ export default function AddMemory() {
               </div>
 
               <div className="mt-1 text-xs text-white/30">
-                This place will be added to your records
-                only when you save this memory.
+                This place will be added to your
+                records only when you save this
+                memory.
               </div>
 
             </div>
@@ -1072,33 +1310,35 @@ export default function AddMemory() {
           {photos.length > 0 && (
             <div className="mt-4 space-y-2">
 
-              {photos.map((photo, index) => (
-                <div
-                  key={`${photo.name}-${index}`}
-                  className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3"
-                >
-
-                  <span className="truncate text-sm text-white/60">
-                    {photo.name}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPhotos(
-                        photos.filter(
-                          (_, i) =>
-                            i !== index
-                        )
-                      );
-                    }}
-                    className="ml-4 text-white/40 transition hover:text-white"
+              {photos.map(
+                (photo, index) => (
+                  <div
+                    key={`${photo.name}-${index}`}
+                    className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3"
                   >
-                    ×
-                  </button>
 
-                </div>
-              ))}
+                    <span className="truncate text-sm text-white/60">
+                      {photo.name}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhotos(
+                          photos.filter(
+                            (_, i) =>
+                              i !== index
+                          )
+                        );
+                      }}
+                      className="ml-4 text-white/40 transition hover:text-white"
+                    >
+                      ×
+                    </button>
+
+                  </div>
+                )
+              )}
 
             </div>
           )}
