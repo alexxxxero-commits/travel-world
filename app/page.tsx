@@ -1,6 +1,6 @@
 import Globe from "@/components/Globe";
 import UserMenu from "@/components/UserMenu";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function Home() {
   // ==========================================
@@ -15,42 +15,16 @@ export default async function Home() {
 
   const {
     data: { user },
-    error: userError,
   } = await supabase.auth.getUser();
 
-  if (userError) {
-    console.error("AUTH ERROR:", userError);
-  }
-
-  console.log("CURRENT USER:", user?.id);
-
   // ==========================================
-  // 3. GET USER PROFILE
+  // 3. LOAD USER'S PLACES
   // ==========================================
 
-  let username = "";
+  let places: any[] = [];
 
   if (user) {
-    const { data: profile, error: profileError } =
-      await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", user.id)
-        .single();
-
-    if (profileError) {
-      console.error("PROFILE ERROR:", profileError);
-    }
-
-    username = profile?.username ?? "";
-  }
-
-  // ==========================================
-  // 4. LOAD PLACES + JOURNALS + PHOTOS
-  // ==========================================
-
-  const { data: places, error: placesError } =
-    await supabase
+    const { data, error } = await supabase
       .from("places")
       .select(`
         *,
@@ -68,37 +42,38 @@ export default async function Home() {
           )
         )
       `)
+      .eq("user_id", user.id)
       .order("city");
 
-  if (placesError) {
-    console.error("PLACES ERROR:", placesError);
+    if (error) {
+      console.error("SUPABASE PLACES ERROR:", error);
+    } else {
+      places = data ?? [];
+    }
   }
 
-  const safePlaces = places ?? [];
-
   // ==========================================
-  // 5. CALCULATE STATS
+  // 4. CALCULATE STATS
   // ==========================================
 
   const countryCount = new Set(
-    safePlaces.map((place) => place.country)
+    places.map((place) => place.country)
   ).size;
 
-  const cityCount = safePlaces.length;
+  const cityCount = places.length;
 
-  const memoryCount = safePlaces.reduce(
+  const memoryCount = places.reduce(
     (total, place) =>
       total + (place.journals?.length ?? 0),
     0
   );
 
   // ==========================================
-  // 6. HOME PAGE
+  // 5. HOME PAGE
   // ==========================================
 
   return (
     <main className="min-h-screen bg-black text-white">
-
       {/* ==========================================
           TOP RIGHT USER MENU
       ========================================== */}
@@ -128,12 +103,14 @@ export default async function Home() {
         {/* Globe */}
 
         <div className="my-10 flex w-full justify-center">
-          <Globe places={safePlaces} />
+          <Globe places={places} />
         </div>
 
         {/* Stats */}
 
         <div className="flex justify-center gap-12 text-center text-sm text-white/50">
+
+          {/* Countries */}
 
           <div>
             <p className="text-3xl font-light text-white">
@@ -147,6 +124,8 @@ export default async function Home() {
             </p>
           </div>
 
+          {/* Cities */}
+
           <div>
             <p className="text-3xl font-light text-white">
               {cityCount}
@@ -158,6 +137,8 @@ export default async function Home() {
                 : "Cities"}
             </p>
           </div>
+
+          {/* Memories */}
 
           <div>
             <p className="text-3xl font-light text-white">
@@ -173,20 +154,12 @@ export default async function Home() {
 
         </div>
 
-        {/* User info */}
-
-        {user && (
-          <p className="mt-8 text-sm text-white/30">
-            Welcome back, @{username || "user"}
-          </p>
-        )}
-
         {/* Add Memory */}
 
         {user && (
           <a
             href="/add"
-            className="mt-8 rounded-full border border-white/20 px-8 py-3 text-sm uppercase tracking-widest transition hover:bg-white hover:text-black"
+            className="mt-16 rounded-full border border-white/20 px-8 py-3 text-sm uppercase tracking-widest transition hover:bg-white hover:text-black"
           >
             Add Memory
           </a>
