@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import JournalActions from "@/components/JournalActions";
+import PhotoPreview from "@/components/PhotoPreview";
 
 type PageProps = {
   params: Promise<{
@@ -263,25 +264,24 @@ export default async function PlacePage({
             <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3">
               {photoList.map((photo) => (
                 <div
-                  key={photo.id}
-                  className="group overflow-hidden rounded-2xl bg-white/5"
+                    key={photo.id}
+                    className="overflow-hidden rounded-2xl bg-white/5"
                 >
-                  <img
-                    src={photo.url}
-                    alt={
+                    <PhotoPreview
+                     src={photo.url}
+                     alt={
                       photo.caption ??
-                      `${place.city} memory`
-                    }
-                    className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105"
-                  />
+                        `${place.city} memory`
+                     }
+                    />
 
-                  {photo.caption && (
+                    {photo.caption && (
                     <p className="p-3 text-xs text-white/40">
-                      {photo.caption}
+                        {photo.caption}
                     </p>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                ))}
             </div>
           </section>
         )}
@@ -361,19 +361,16 @@ export default async function PlacePage({
 
                     {journalPhotos.length > 0 && (
                       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        {journalPhotos.map(
-                          (photo) => (
-                            <img
-                              key={photo.id}
-                              src={photo.url}
-                              alt={
+                        {journalPhotos.map((photo) => (
+                          <PhotoPreview
+                            key={photo.id}
+                            src={photo.url}
+                            alt={
                                 photo.caption ??
                                 journal.title
-                              }
-                              className="max-h-[500px] w-full rounded-2xl object-cover"
-                            />
-                          )
-                        )}
+                            }
+                          />
+                        ))}
                       </div>
                     )}
 
