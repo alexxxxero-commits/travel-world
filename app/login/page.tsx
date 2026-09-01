@@ -151,7 +151,7 @@ export default function Login() {
         {/* Sign Up */}
 
         <p className="mt-8 text-center text-sm text-white/40">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <button
             type="button"
             onClick={() =>

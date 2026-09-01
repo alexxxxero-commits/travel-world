@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import VoiceRecorder from "@/components/VoiceRecorder";
 
 type Place = {
   id: string;
@@ -40,6 +41,147 @@ type NominatimResult = {
   };
 };
 
+// ==========================================
+// DISTANCE
+// ==========================================
+
+function distanceBetweenPlaces(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+) {
+  const toRad = (value: number) =>
+    (value * Math.PI) / 180;
+
+  const R = 6371;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+
+  const c =
+    2 *
+    Math.atan2(
+      Math.sqrt(a),
+      Math.sqrt(1 - a)
+    );
+
+  return R * c;
+}
+
+// ==========================================
+// NORMALIZE CITY NAME
+// ==========================================
+
+function getEnglishCity(
+  item: NominatimResult
+): string {
+  const address = item.address;
+  const names = item.namedetails;
+
+  // Best option: explicit English name
+  if (names?.["name:en"]) {
+    return names["name:en"];
+  }
+
+  const city =
+    address?.city ||
+    address?.town ||
+    address?.municipality ||
+    address?.village ||
+    "";
+
+  const chineseCityMap: Record<string, string> = {
+    北京: "Beijing",
+    上海: "Shanghai",
+    南京: "Nanjing",
+    杭州: "Hangzhou",
+    苏州: "Suzhou",
+    成都: "Chengdu",
+    重庆: "Chongqing",
+    西安: "Xi'an",
+    武汉: "Wuhan",
+    广州: "Guangzhou",
+    深圳: "Shenzhen",
+    天津: "Tianjin",
+    厦门: "Xiamen",
+    青岛: "Qingdao",
+    大连: "Dalian",
+    沈阳: "Shenyang",
+    长沙: "Changsha",
+    郑州: "Zhengzhou",
+    济南: "Jinan",
+    福州: "Fuzhou",
+    昆明: "Kunming",
+    哈尔滨: "Harbin",
+    台北: "Taipei",
+    高雄: "Kaohsiung",
+    澳门: "Macau",
+    香港: "Hong Kong",
+  };
+
+  if (chineseCityMap[city]) {
+    return chineseCityMap[city];
+  }
+
+  return city;
+}
+
+// ==========================================
+// NORMALIZE COUNTRY NAME
+// ==========================================
+
+function getEnglishCountry(
+  item: NominatimResult
+): string {
+  const country = item.address?.country || "";
+
+  const countryMap: Record<string, string> = {
+    中国: "China",
+    台湾: "Taiwan",
+    智利: "Chile",
+    美国: "United States",
+    英国: "United Kingdom",
+    法国: "France",
+    德国: "Germany",
+    西班牙: "Spain",
+    意大利: "Italy",
+    葡萄牙: "Portugal",
+    日本: "Japan",
+    韩国: "South Korea",
+    泰国: "Thailand",
+    越南: "Vietnam",
+    新加坡: "Singapore",
+    澳大利亚: "Australia",
+    加拿大: "Canada",
+    墨西哥: "Mexico",
+    阿根廷: "Argentina",
+    巴西: "Brazil",
+    秘鲁: "Peru",
+    玻利维亚: "Bolivia",
+    哥伦比亚: "Colombia",
+    委内瑞拉: "Venezuela",
+    乌拉圭: "Uruguay",
+    巴拉圭: "Paraguay",
+    厄瓜多尔: "Ecuador",
+    古巴: "Cuba",
+    摩洛哥: "Morocco",
+    印度: "India",
+  };
+
+  if (countryMap[country]) {
+    return countryMap[country];
+  }
+
+  return country;
+}
+
 export default function AddMemory() {
   const supabase = createClient();
   const router = useRouter();
@@ -54,165 +196,29 @@ export default function AddMemory() {
     useState<SearchResult | null>(null);
 
   const [citySearch, setCitySearch] = useState("");
-  const [searchingCity, setSearchingCity] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchingCity, setSearchingCity] =
+    useState(false);
+
+  const [searchResults, setSearchResults] =
+    useState<SearchResult[]>([]);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+
   const [photos, setPhotos] = useState<File[]>([]);
+
+  // ==========================================
+  // VOICE JOURNAL
+  // ==========================================
+
+  const [voiceFile, setVoiceFile] =
+    useState<File | null>(null);
+
+  const [voiceDuration, setVoiceDuration] =
+    useState(0);
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-
-  // ==========================================
-  // DISTANCE
-  // ==========================================
-
-  function distanceBetweenPlaces(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number
-  ) {
-    const toRad = (value: number) => (value * Math.PI) / 180;
-
-    const R = 6371;
-
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(lat1)) *
-        Math.cos(toRad(lat2)) *
-        Math.sin(dLon / 2) ** 2;
-
-    const c =
-      2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c;
-  }
-
-  // ==========================================
-  // NORMALIZE CITY NAME
-  // ==========================================
-  //
-  // We ALWAYS prefer English.
-  //
-  // Example:
-  //
-  // 北京 -> Beijing
-  // 圣地亚哥 -> Santiago
-  //
-  // ==========================================
-
-  function getEnglishCity(item: NominatimResult): string {
-    const address = item.address;
-    const names = item.namedetails;
-
-    // Best option: explicit English name
-    if (names?.["name:en"]) {
-      return names["name:en"];
-    }
-
-    // Nominatim sometimes already returns English
-    const city =
-      address?.city ||
-      address?.town ||
-      address?.municipality ||
-      address?.village ||
-      "";
-
-    // Common Chinese cities.
-    // This also guarantees Chinese searches produce
-    // clean English output.
-
-    const chineseCityMap: Record<string, string> = {
-      北京: "Beijing",
-      上海: "Shanghai",
-      南京: "Nanjing",
-      杭州: "Hangzhou",
-      苏州: "Suzhou",
-      成都: "Chengdu",
-      重庆: "Chongqing",
-      西安: "Xi'an",
-      武汉: "Wuhan",
-      广州: "Guangzhou",
-      深圳: "Shenzhen",
-      天津: "Tianjin",
-      厦门: "Xiamen",
-      青岛: "Qingdao",
-      大连: "Dalian",
-      沈阳: "Shenyang",
-      长沙: "Changsha",
-      郑州: "Zhengzhou",
-      济南: "Jinan",
-      福州: "Fuzhou",
-      昆明: "Kunming",
-      哈尔滨: "Harbin",
-      台北: "Taipei",
-      高雄: "Kaohsiung",
-      澳门: "Macau",
-      香港: "Hong Kong",
-    };
-
-    if (chineseCityMap[city]) {
-      return chineseCityMap[city];
-    }
-
-    return city;
-  }
-
-  // ==========================================
-  // NORMALIZE COUNTRY NAME
-  // ==========================================
-  //
-  // Always use English country names.
-  //
-  // ==========================================
-
-  function getEnglishCountry(item: NominatimResult): string {
-    const country = item.address?.country || "";
-
-    const countryMap: Record<string, string> = {
-      中国: "China",
-      台湾: "Taiwan",
-      智利: "Chile",
-      美国: "United States",
-      英国: "United Kingdom",
-      法国: "France",
-      德国: "Germany",
-      西班牙: "Spain",
-      意大利: "Italy",
-      葡萄牙: "Portugal",
-      日本: "Japan",
-      韩国: "South Korea",
-      泰国: "Thailand",
-      越南: "Vietnam",
-      新加坡: "Singapore",
-      澳大利亚: "Australia",
-      加拿大: "Canada",
-      墨西哥: "Mexico",
-      阿根廷: "Argentina",
-      巴西: "Brazil",
-      秘鲁: "Peru",
-      玻利维亚: "Bolivia",
-      哥伦比亚: "Colombia",
-      委内瑞拉: "Venezuela",
-      乌拉圭: "Uruguay",
-      巴拉圭: "Paraguay",
-      厄瓜多尔: "Ecuador",
-      古巴: "Cuba",
-      摩洛哥: "Morocco",
-      印度: "India",
-    };
-
-    if (countryMap[country]) {
-      return countryMap[country];
-    }
-
-    return country;
-  }
 
   // ==========================================
   // LOAD EXISTING PLACES
@@ -230,11 +236,13 @@ export default function AddMemory() {
       }
 
       // Only load places that have journals.
-      const { data: journals, error: journalsError } =
-        await supabase
-          .from("journals")
-          .select("place_id")
-          .eq("user_id", user.id);
+      const {
+        data: journals,
+        error: journalsError,
+      } = await supabase
+        .from("journals")
+        .select("place_id")
+        .eq("user_id", user.id);
 
       if (journalsError) {
         console.error(
@@ -262,7 +270,10 @@ export default function AddMemory() {
         return;
       }
 
-      const { data, error } = await supabase
+      const {
+        data,
+        error,
+      } = await supabase
         .from("places")
         .select(
           "id, city, country, latitude, longitude"
@@ -293,99 +304,83 @@ export default function AddMemory() {
   // ==========================================
   // SEARCH CITY
   // ==========================================
-  //
-  // IMPORTANT:
-  //
-  // This is now designed to work with
-  // automatic search.
-  //
-  // Example:
-  //
-  // "b"      -> recommendations
-  // "bei"    -> Beijing
-  // "北"     -> Beijing
-  // "sant"   -> Santiago
-  //
-  // ==========================================
 
-  async function searchCity(query?: string) {
-    const searchText =
-      query !== undefined
-        ? query.trim()
-        : citySearch.trim();
+  const searchCity = useCallback(
+    async (query?: string) => {
+      const searchText =
+        query !== undefined
+          ? query.trim()
+          : citySearch.trim();
 
-    if (!searchText) {
-      setSearchResults([]);
-      return;
-    }
-
-    setSearchingCity(true);
-
-    try {
-      const url =
-        "https://nominatim.openstreetmap.org/search" +
-        `?format=jsonv2` +
-        `&addressdetails=1` +
-        `&namedetails=1` +
-        `&accept-language=en` +
-        `&limit=10` +
-        `&q=${encodeURIComponent(searchText)}`;
-
-      const response = await fetch(url, {
-        headers: {
-          Accept: "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("City search failed");
+      if (!searchText) {
+        setSearchResults([]);
+        return;
       }
 
-      const data: NominatimResult[] =
-        await response.json();
+      setSearchingCity(true);
 
-      const results: SearchResult[] = data
-        .map((item) => ({
-          city: getEnglishCity(item),
-          country: getEnglishCountry(item),
-          latitude: Number(item.lat),
-          longitude: Number(item.lon),
-        }))
-        .filter(
-          (item) =>
-            item.city &&
-            item.country &&
-            !Number.isNaN(item.latitude) &&
-            !Number.isNaN(item.longitude)
+      try {
+        const url =
+          "https://nominatim.openstreetmap.org/search" +
+          `?format=jsonv2` +
+          `&addressdetails=1` +
+          `&namedetails=1` +
+          `&accept-language=en` +
+          `&limit=10` +
+          `&q=${encodeURIComponent(searchText)}`;
+
+        const response = await fetch(url, {
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("City search failed");
+        }
+
+        const data: NominatimResult[] =
+          await response.json();
+
+        const results: SearchResult[] = data
+          .map((item) => ({
+            city: getEnglishCity(item),
+            country: getEnglishCountry(item),
+            latitude: Number(item.lat),
+            longitude: Number(item.lon),
+          }))
+          .filter(
+            (item) =>
+              item.city &&
+              item.country &&
+              !Number.isNaN(item.latitude) &&
+              !Number.isNaN(item.longitude)
+          );
+
+        // ==========================================
+        // REMOVE DUPLICATES
+        // ==========================================
+
+        const uniqueResults = results.filter(
+          (result, index, array) =>
+            index ===
+            array.findIndex(
+              (item) =>
+                item.city.toLowerCase() ===
+                  result.city.toLowerCase() &&
+                item.country.toLowerCase() ===
+                  result.country.toLowerCase()
+            )
         );
 
-      // ==========================================
-      // REMOVE DUPLICATES
-      // ==========================================
+        // ==========================================
+        // SORT
+        // Existing places first
+        // ==========================================
 
-      const uniqueResults = results.filter(
-        (result, index, array) =>
-          index ===
-          array.findIndex(
-            (item) =>
-              item.city.toLowerCase() ===
-                result.city.toLowerCase() &&
-              item.country.toLowerCase() ===
-                result.country.toLowerCase()
-          )
-      );
-
-      // ==========================================
-      // SORT:
-      //
-      // Existing places first
-      //
-      // This makes your existing Santiago
-      // appear before creating another Santiago.
-      // ==========================================
-
-      const sortedResults = [...uniqueResults].sort(
-        (a, b) => {
+        const sortedResults = [
+          ...uniqueResults,
+        ].sort((a, b) => {
           const aExisting = places.some((place) => {
             const sameName =
               place.city.toLowerCase() ===
@@ -393,7 +388,9 @@ export default function AddMemory() {
               place.country.toLowerCase() ===
                 a.country.toLowerCase();
 
-            if (sameName) return true;
+            if (sameName) {
+              return true;
+            }
 
             if (
               place.latitude === undefined ||
@@ -419,7 +416,9 @@ export default function AddMemory() {
               place.country.toLowerCase() ===
                 b.country.toLowerCase();
 
-            if (sameName) return true;
+            if (sameName) {
+              return true;
+            }
 
             if (
               place.latitude === undefined ||
@@ -438,55 +437,50 @@ export default function AddMemory() {
             );
           });
 
-          if (aExisting && !bExisting) return -1;
-          if (!aExisting && bExisting) return 1;
+          if (aExisting && !bExisting) {
+            return -1;
+          }
+
+          if (!aExisting && bExisting) {
+            return 1;
+          }
 
           return a.city.localeCompare(b.city);
+        });
+
+        setSearchResults(sortedResults);
+
+        if (sortedResults.length === 0) {
+          setMessage("No places found.");
+        } else {
+          setMessage("");
         }
-      );
+      } catch (error) {
+        console.error(
+          "CITY SEARCH ERROR:",
+          error
+        );
 
-      setSearchResults(sortedResults);
+        setSearchResults([]);
 
-      if (sortedResults.length === 0) {
-        setMessage("No places found.");
-      } else {
-        setMessage("");
+        setMessage(
+          "Could not find that place."
+        );
+      } finally {
+        setSearchingCity(false);
       }
-    } catch (error) {
-      console.error(
-        "CITY SEARCH ERROR:",
-        error
-      );
-
-      setSearchResults([]);
-      setMessage("Could not find that place.");
-    } finally {
-      setSearchingCity(false);
-    }
-  }
+    },
+    [citySearch, places]
+  );
 
   // ==========================================
   // LIVE SEARCH
-  // ==========================================
-  //
-  // THIS is the important new part.
-  //
-  // Every time the user types:
-  //
-  // 北
-  // 北 -> automatically search
-  //
-  // 北京
-  // 北京 -> automatically search
-  //
   // ==========================================
 
   useEffect(() => {
     const query = citySearch.trim();
 
     if (!query) {
-      setSearchResults([]);
-      setSearchingCity(false);
       return;
     }
 
@@ -497,7 +491,7 @@ export default function AddMemory() {
     return () => {
       clearTimeout(timer);
     };
-  }, [citySearch]);
+  }, [citySearch, searchCity]);
 
   // ==========================================
   // SELECT SEARCH RESULT
@@ -592,7 +586,6 @@ export default function AddMemory() {
       setMessage(
         `Please fill in: ${missingFields.join(", ")}.`
       );
-
       return;
     }
 
@@ -755,7 +748,10 @@ export default function AddMemory() {
     // ==========================================
 
     if (!finalPlaceId) {
-      setMessage("Please select a Place.");
+      setMessage(
+        "Please select a Place."
+      );
+
       setSaving(false);
       return;
     }
@@ -1018,6 +1014,209 @@ export default function AddMemory() {
     }
 
     // ==========================================
+    // UPLOAD VOICE JOURNAL
+    // ==========================================
+
+    let uploadedVoicePath: string | null = null;
+
+    if (voiceFile) {
+      const extension =
+        voiceFile.name
+          .split(".")
+          .pop()
+          ?.toLowerCase() || "webm";
+
+      const uniqueName =
+        `${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}.${extension}`;
+
+      uploadedVoicePath =
+        `voices/${user.id}/${uniqueName}`;
+
+      const {
+        error: voiceUploadError,
+      } = await supabase.storage
+        .from("voice-journals")
+        .upload(
+          uploadedVoicePath,
+          voiceFile,
+          {
+            cacheControl: "3600",
+            upsert: false,
+            contentType:
+              voiceFile.type || "audio/webm",
+          }
+        );
+
+      if (voiceUploadError) {
+        console.error(
+          "VOICE UPLOAD ERROR:",
+          voiceUploadError
+        );
+
+        // Remove uploaded voice file
+        if (uploadedVoicePath) {
+          const {
+            error: removeVoiceError,
+          } = await supabase.storage
+            .from("voice-journals")
+            .remove([uploadedVoicePath]);
+
+          if (removeVoiceError) {
+            console.error(
+              "VOICE ROLLBACK ERROR:",
+              removeVoiceError
+            );
+          }
+        }
+
+        // Remove uploaded photo files
+        if (uploadedFilePaths.length > 0) {
+          const {
+            error: removePhotoError,
+          } = await supabase.storage
+            .from("photos")
+            .remove(uploadedFilePaths);
+
+          if (removePhotoError) {
+            console.error(
+              "PHOTO ROLLBACK ERROR:",
+              removePhotoError
+            );
+          }
+        }
+
+        // Delete journal
+        await supabase
+          .from("journals")
+          .delete()
+          .eq("id", journal.id);
+
+        // Delete new place
+        if (createdNewPlace) {
+          await supabase
+            .from("places")
+            .delete()
+            .eq("id", finalPlaceId);
+
+          setPlaces((current) =>
+            current.filter(
+              (place) =>
+                place.id !== finalPlaceId
+            )
+          );
+        }
+
+        setMessage(
+          `Voice upload failed: ${voiceUploadError.message}`
+        );
+
+        setSaving(false);
+        return;
+      }
+
+      console.log(
+        "VOICE UPLOAD SUCCESS:",
+        uploadedVoicePath
+      );
+
+      // ==========================================
+      // SAVE VOICE JOURNAL RECORD
+      // ==========================================
+
+      const {
+        data: voiceJournal,
+        error: voiceInsertError,
+      } = await supabase
+        .from("voice_journals")
+        .insert({
+          user_id: user.id,
+          place_id: finalPlaceId,
+          journal_id: journal.id,
+          storage_path: uploadedVoicePath,
+          duration: voiceDuration,
+        })
+        .select()
+        .single();
+
+      if (voiceInsertError || !voiceJournal) {
+        console.error(
+          "VOICE JOURNAL INSERT ERROR:",
+          voiceInsertError
+        );
+
+        // Remove voice file
+        if (uploadedVoicePath) {
+          const {
+            error: removeVoiceError,
+          } = await supabase.storage
+            .from("voice-journals")
+            .remove([uploadedVoicePath]);
+
+          if (removeVoiceError) {
+            console.error(
+              "VOICE ROLLBACK ERROR:",
+              removeVoiceError
+            );
+          }
+        }
+
+        // Remove photo files
+        if (uploadedFilePaths.length > 0) {
+          const {
+            error: removePhotoError,
+          } = await supabase.storage
+            .from("photos")
+            .remove(uploadedFilePaths);
+
+          if (removePhotoError) {
+            console.error(
+              "PHOTO ROLLBACK ERROR:",
+              removePhotoError
+            );
+          }
+        }
+
+        // Delete journal
+        await supabase
+          .from("journals")
+          .delete()
+          .eq("id", journal.id);
+
+        // Delete new place
+        if (createdNewPlace) {
+          await supabase
+            .from("places")
+            .delete()
+            .eq("id", finalPlaceId);
+
+          setPlaces((current) =>
+            current.filter(
+              (place) =>
+                place.id !== finalPlaceId
+            )
+          );
+        }
+
+        setMessage(
+          `Voice journal could not be saved: ${
+            voiceInsertError?.message ??
+            "Unknown error"
+          }`
+        );
+
+        setSaving(false);
+        return;
+      }
+
+      console.log(
+        "VOICE JOURNAL INSERTED:",
+        voiceJournal
+      );
+    }
+
+    // ==========================================
     // SUCCESS
     // ==========================================
 
@@ -1029,14 +1228,22 @@ export default function AddMemory() {
     setCitySearch("");
     setSearchResults([]);
 
+    // Clear voice state
+    setVoiceFile(null);
+    setVoiceDuration(0);
+
     setMessage(
-      photos.length > 0
+      photos.length > 0 && voiceFile
         ? `Memory saved ✨ ${photos.length} photo${
-            photos.length > 1
-              ? "s"
-              : ""
-          } added.`
-        : "Memory saved ✨"
+            photos.length > 1 ? "s" : ""
+          } and voice journal added.`
+        : photos.length > 0
+          ? `Memory saved ✨ ${photos.length} photo${
+              photos.length > 1 ? "s" : ""
+            } added.`
+          : voiceFile
+            ? "Memory saved ✨ Voice journal added."
+            : "Memory saved ✨"
     );
 
     setSaving(false);
@@ -1054,7 +1261,6 @@ export default function AddMemory() {
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <div className="mx-auto max-w-xl">
-
         <p className="text-sm uppercase tracking-[0.4em] text-white/40">
           The World Of Mine
         </p>
@@ -1072,7 +1278,6 @@ export default function AddMemory() {
         ========================================== */}
 
         <div className="mt-12">
-
           <label className="text-sm text-white/60">
             Place
           </label>
@@ -1080,15 +1285,15 @@ export default function AddMemory() {
           {/* SEARCH */}
 
           <div className="mt-3">
-
             <div className="flex gap-3">
-
               <input
                 value={citySearch}
                 onChange={(e) => {
-                  setCitySearch(e.target.value);
+                  const value =
+                    e.target.value;
 
-                  // Typing cancels previous selection
+                  setCitySearch(value);
+
                   if (selectedSearchPlace) {
                     setSelectedSearchPlace(null);
                   }
@@ -1098,6 +1303,11 @@ export default function AddMemory() {
                   }
 
                   setMessage("");
+
+                  if (!value.trim()) {
+                    setSearchResults([]);
+                    setSearchingCity(false);
+                  }
                 }}
                 placeholder="Search for a city..."
                 className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
@@ -1116,49 +1326,49 @@ export default function AddMemory() {
                   ? "..."
                   : "Search"}
               </button>
-
             </div>
 
             {/* SEARCH RESULTS */}
 
             {searchResults.length > 0 && (
               <div className="mt-3 space-y-2">
-
                 {searchResults.map(
                   (result, index) => (
                     <button
                       key={`${result.city}-${result.country}-${index}`}
                       type="button"
                       onClick={() =>
-                        selectSearchResult(result)
+                        selectSearchResult(
+                          result
+                        )
                       }
                       className="block w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left transition hover:bg-white/10"
                     >
-
                       <div className="text-white">
                         {result.city},{" "}
                         {result.country}
                       </div>
 
                       <div className="mt-1 text-xs text-white/30">
-                        {result.latitude.toFixed(4)},{" "}
-                        {result.longitude.toFixed(4)}
+                        {result.latitude.toFixed(
+                          4
+                        )}
+                        ,{" "}
+                        {result.longitude.toFixed(
+                          4
+                        )}
                       </div>
-
                     </button>
                   )
                 )}
-
               </div>
             )}
-
           </div>
 
           {/* SELECTED SEARCH PLACE */}
 
           {selectedSearchPlace && (
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
-
               <div className="text-xs uppercase tracking-widest text-white/30">
                 Selected place
               </div>
@@ -1169,18 +1379,16 @@ export default function AddMemory() {
               </div>
 
               <div className="mt-1 text-xs text-white/30">
-                This place will be added to your
-                records only when you save this
-                memory.
+                This place will be added to
+                your records only when you
+                save this memory.
               </div>
-
             </div>
           )}
 
           {/* EXISTING PLACES */}
 
           <div className="mt-4">
-
             <label className="text-xs text-white/30">
               Or choose an existing place
             </label>
@@ -1196,7 +1404,6 @@ export default function AddMemory() {
               }}
               className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none"
             >
-
               <option
                 value=""
                 className="bg-black"
@@ -1210,14 +1417,12 @@ export default function AddMemory() {
                   value={place.id}
                   className="bg-black"
                 >
-                  {place.city}, {place.country}
+                  {place.city},{" "}
+                  {place.country}
                 </option>
               ))}
-
             </select>
-
           </div>
-
         </div>
 
         {/* ==========================================
@@ -1225,7 +1430,6 @@ export default function AddMemory() {
         ========================================== */}
 
         <div className="mt-8">
-
           <label className="text-sm text-white/60">
             Title
           </label>
@@ -1238,7 +1442,6 @@ export default function AddMemory() {
             placeholder="My first day in Santiago..."
             className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
           />
-
         </div>
 
         {/* ==========================================
@@ -1246,7 +1449,6 @@ export default function AddMemory() {
         ========================================== */}
 
         <div className="mt-8">
-
           <label className="text-sm text-white/60">
             Your story
           </label>
@@ -1260,7 +1462,28 @@ export default function AddMemory() {
             rows={8}
             className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none placeholder:text-white/20"
           />
+        </div>
 
+        {/* ==========================================
+            VOICE JOURNAL
+        ========================================== */}
+
+        <div className="mt-8">
+          <label className="text-sm text-white/60">
+            Voice Journal
+          </label>
+
+          <div className="mt-3">
+            <VoiceRecorder
+              onRecordingComplete={(
+                file,
+                duration
+              ) => {
+                setVoiceFile(file);
+                setVoiceDuration(duration);
+              }}
+            />
+          </div>
         </div>
 
         {/* ==========================================
@@ -1268,13 +1491,11 @@ export default function AddMemory() {
         ========================================== */}
 
         <div className="mt-8">
-
           <label className="text-sm text-white/60">
             Photos
           </label>
 
           <label className="mt-3 flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-white/20 bg-white/5 px-6 py-10 text-center transition hover:bg-white/10">
-
             <span className="text-3xl">
               📷
             </span>
@@ -1295,28 +1516,26 @@ export default function AddMemory() {
               multiple
               className="hidden"
               onChange={(e) => {
-                const files = Array.from(
-                  e.target.files ?? []
-                );
+                const files =
+                  Array.from(
+                    e.target.files ?? []
+                  );
 
                 setPhotos(files);
               }}
             />
-
           </label>
 
           {/* SELECTED PHOTOS */}
 
           {photos.length > 0 && (
             <div className="mt-4 space-y-2">
-
               {photos.map(
                 (photo, index) => (
                   <div
                     key={`${photo.name}-${index}`}
                     className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3"
                   >
-
                     <span className="truncate text-sm text-white/60">
                       {photo.name}
                     </span>
@@ -1335,14 +1554,11 @@ export default function AddMemory() {
                     >
                       ×
                     </button>
-
                   </div>
                 )
               )}
-
             </div>
           )}
-
         </div>
 
         {/* ==========================================
@@ -1369,7 +1585,6 @@ export default function AddMemory() {
             {message}
           </p>
         )}
-
       </div>
     </main>
   );

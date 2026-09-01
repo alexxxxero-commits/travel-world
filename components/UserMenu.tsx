@@ -14,106 +14,150 @@ export default function UserMenu() {
   const [loading, setLoading] =
     useState(true);
 
-  async function loadUser() {
-    setLoading(true);
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError) {
-      console.error(
-        "GET USER ERROR:",
-        userError
-      );
-
-      setUsername(null);
-      setLoading(false);
-      return;
-    }
-
-    if (!user) {
-      setUsername(null);
-      setLoading(false);
-      return;
-    }
-
-    console.log(
-      "CURRENT USER:",
-      user
-    );
-
-    const {
-      data: profile,
-      error: profileError,
-    } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", user.id)
-      .single();
-
-    if (profileError) {
-      console.error(
-        "PROFILE LOAD ERROR:",
-        profileError
-      );
-
-      setUsername(null);
-      setLoading(false);
-      return;
-    }
-
-    setUsername(
-      profile?.username ?? null
-    );
-
-    setLoading(false);
-  }
-
   useEffect(() => {
-    loadUser();
+    let mounted = true;
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log(
-          "AUTH EVENT:",
-          event
+    async function loadUser() {
+      if (!mounted) return;
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error(
+          "GET USER ERROR:",
+          userError
         );
 
-        if (!session?.user) {
+        if (mounted) {
           setUsername(null);
-          return;
+          setLoading(false);
         }
 
-        const {
-          data: profile,
-          error,
-        } = await supabase
-          .from("profiles")
-          .select("username")
-          .eq("id", session.user.id)
-          .single();
+        return;
+      }
 
-        if (error) {
-          console.error(
-            "PROFILE LOAD ERROR:",
-            error
-          );
-
-          return;
+      if (!user) {
+        if (mounted) {
+          setUsername(null);
+          setLoading(false);
         }
 
+        return;
+      }
+
+      console.log("CURRENT USER:", user);
+
+      const {
+        data: profile,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError) {
+        console.error(
+          "PROFILE LOAD ERROR:",
+          profileError
+        );
+
+        if (mounted) {
+          setUsername(null);
+          setLoading(false);
+        }
+
+        return;
+      }
+
+      if (mounted) {
         setUsername(
           profile?.username ?? null
         );
+
+        setLoading(false);
       }
-    );
+    }
+
+    async function initialize() {
+      await loadUser();
+
+      if (!mounted) return;
+
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          console.log(
+            "AUTH EVENT:",
+            event
+          );
+
+          if (!mounted) return;
+
+          if (!session?.user) {
+            setUsername(null);
+            setLoading(false);
+            return;
+          }
+
+          const {
+            data: profile,
+            error,
+          } = await supabase
+            .from("profiles")
+            .select("username")
+            .eq("id", session.user.id)
+            .single();
+
+          if (error) {
+            console.error(
+              "PROFILE LOAD ERROR:",
+              error
+            );
+
+            if (mounted) {
+              setUsername(null);
+              setLoading(false);
+            }
+
+            return;
+          }
+
+          if (mounted) {
+            setUsername(
+              profile?.username ?? null
+            );
+
+            setLoading(false);
+          }
+        }
+      );
+
+      return subscription;
+    }
+
+    let subscription:
+      | ReturnType<
+          typeof supabase.auth.onAuthStateChange
+        >["data"]["subscription"]
+      | null = null;
+
+    initialize().then((result) => {
+      if (result) {
+        subscription = result;
+      }
+    });
 
     return () => {
-      subscription.unsubscribe();
+      mounted = false;
+
+      if (subscription) {
+        subscription.unsubscribe();
+      }
     };
   }, [supabase]);
 

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import JournalActions from "@/components/JournalActions";
 import PhotoPreview from "@/components/PhotoPreview";
+import Link from "next/link";
 
 type PageProps = {
   params: Promise<{
@@ -93,12 +94,12 @@ export default async function PlacePage({
             Place not found.
           </p>
 
-          <a
+          <Link
             href="/"
             className="mt-5 inline-block text-sm text-white/60 underline underline-offset-4"
           >
             ← Back to the world
-          </a>
+          </Link>
         </div>
       </main>
     );
@@ -180,12 +181,12 @@ export default async function PlacePage({
 
         {/* BACK */}
 
-        <a
+        <Link
           href="/"
           className="text-sm text-white/40 transition hover:text-white"
         >
           ← Back to the world
-        </a>
+        </Link>
 
         {/* HEADER */}
 
@@ -389,12 +390,12 @@ export default async function PlacePage({
                   No memories yet.
                 </p>
 
-                <a
+                <Link
                   href="/add"
                   className="mt-5 inline-block text-sm text-white/60 underline underline-offset-4"
                 >
                   Write your first memory →
-                </a>
+                </Link>
               </div>
             )}
           </div>

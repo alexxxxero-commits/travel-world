@@ -2,6 +2,36 @@ import Globe from "@/components/Globe";
 import UserMenu from "@/components/UserMenu";
 import { createClient } from "@/lib/supabase/server";
 
+type Photo = {
+  id: string;
+  place_id: string;
+  journal_id: string;
+  url: string;
+  caption: string | null;
+  created_at: string;
+};
+
+type Journal = {
+  id: string;
+  user_id: string;
+  place_id: string;
+  title: string;
+  content: string;
+  created_at: string;
+  photos: Photo[];
+};
+
+type Place = {
+  id: string;
+  user_id: string | null;
+  city: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+  description: string | null;
+  journals: Journal[];
+};
+
 export default async function Home() {
   // ==========================================
   // 1. CREATE SERVER SUPABASE CLIENT
@@ -25,7 +55,7 @@ export default async function Home() {
   // 3. LOAD USER'S PLACES
   // ==========================================
 
-  let places: any[] = [];
+  let places: Place[] = [];
 
   if (user) {
     const {
@@ -38,9 +68,15 @@ export default async function Home() {
       .order("city");
 
     if (error) {
-      console.error("SUPABASE PLACES ERROR:", error);
+      console.error(
+        "SUPABASE PLACES ERROR:",
+        error
+      );
     } else {
-      places = data ?? [];
+      places = (data ?? []).map((place) => ({
+        ...place,
+        journals: [],
+      })) as Place[];
     }
   }
 
@@ -48,7 +84,7 @@ export default async function Home() {
   // 4. LOAD USER'S JOURNALS
   // ==========================================
 
-  let journals: any[] = [];
+  let journals: Journal[] = [];
 
   if (user) {
     const {
@@ -63,52 +99,106 @@ export default async function Home() {
       });
 
     if (error) {
-      console.error("SUPABASE JOURNALS ERROR:", error);
+      console.error(
+        "SUPABASE JOURNALS ERROR:",
+        error
+      );
     } else {
-      journals = data ?? [];
+      journals = (data ?? []).map((journal) => ({
+        ...journal,
+        photos: [],
+      })) as Journal[];
     }
   }
 
   // ==========================================
-  // 5. CONNECT JOURNALS TO PLACES
+  // 5. LOAD PHOTOS
+  // ==========================================
+  //
+  // photos 表没有 user_id。
+  // 所以先获取属于当前用户 journals 的照片。
+  //
+
+  let photos: Photo[] = [];
+
+  if (user && journals.length > 0) {
+    const journalIds = journals.map(
+      (journal) => journal.id
+    );
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("photos")
+      .select("*")
+      .in("journal_id", journalIds);
+
+    if (error) {
+      console.error(
+        "SUPABASE PHOTOS ERROR:",
+        error
+      );
+    } else {
+      photos = (data ?? []) as Photo[];
+    }
+  }
+
+  // ==========================================
+  // 6. CONNECT PHOTOS → JOURNALS
   // ==========================================
 
-  const placesWithJournals = places.map((place) => ({
-    ...place,
-
-    journals: journals.filter(
-      (journal) => journal.place_id === place.id
-    ),
-  }));
+  const journalsWithPhotos = journals.map(
+    (journal) => ({
+      ...journal,
+      photos: photos.filter(
+        (photo) =>
+          photo.journal_id === journal.id
+      ),
+    })
+  );
 
   // ==========================================
-  // 6. CALCULATE STATS
+  // 7. CONNECT JOURNALS → PLACES
+  // ==========================================
+
+  const placesWithJournals =
+    places.map((place) => ({
+      ...place,
+      journals:
+        journalsWithPhotos.filter(
+          (journal) =>
+            journal.place_id === place.id
+        ),
+    }));
+
+  // ==========================================
+  // 8. CALCULATE STATS
   // ==========================================
 
   const countryCount = new Set(
-    places.map((place) => place.country)
+    places.map(
+      (place) => place.country
+    )
   ).size;
 
   const cityCount = places.length;
 
-  const memoryCount = journals.length;
+  const memoryCount =
+    journals.length;
 
   // ==========================================
-  // 7. HOME PAGE
+  // 9. HOME PAGE
   // ==========================================
 
   return (
     <main className="min-h-screen bg-black text-white">
       {/* USER MENU */}
-
       <UserMenu />
 
       {/* MAIN CONTENT */}
-
       <div className="flex min-h-screen flex-col items-center px-6 py-20">
-
         {/* HEADER */}
-
         <p className="mb-6 text-sm uppercase tracking-[0.4em] text-white/50">
           My personal travel journal
         </p>
@@ -122,17 +212,15 @@ export default async function Home() {
         </p>
 
         {/* GLOBE */}
-
         <div className="my-10 flex w-full justify-center">
-          <Globe places={placesWithJournals} />
+          <Globe
+            places={placesWithJournals}
+          />
         </div>
 
         {/* STATS */}
-
         <div className="flex justify-center gap-12 text-center text-sm text-white/50">
-
           {/* COUNTRIES */}
-
           <div>
             <p className="text-3xl font-light text-white">
               {countryCount}
@@ -146,7 +234,6 @@ export default async function Home() {
           </div>
 
           {/* CITIES */}
-
           <div>
             <p className="text-3xl font-light text-white">
               {cityCount}
@@ -160,7 +247,6 @@ export default async function Home() {
           </div>
 
           {/* MEMORIES */}
-
           <div>
             <p className="text-3xl font-light text-white">
               {memoryCount}
@@ -172,11 +258,9 @@ export default async function Home() {
                 : "Memories"}
             </p>
           </div>
-
         </div>
 
         {/* ADD MEMORY */}
-
         {user && (
           <a
             href="/add"
@@ -185,7 +269,6 @@ export default async function Home() {
             Add Memory
           </a>
         )}
-
       </div>
     </main>
   );
