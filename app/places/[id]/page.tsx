@@ -27,6 +27,16 @@ type Journal = {
   user_id: string;
 };
 
+type VoiceJournal = {
+  id: string;
+  user_id: string;
+  place_id: string;
+  journal_id: string;
+  storage_path: string;
+  duration: number;
+  created_at: string;
+};
+
 export default async function PlacePage({
   params,
 }: PageProps) {
@@ -145,12 +155,58 @@ export default async function PlacePage({
   }
 
   // ==========================================
+// GET VOICE JOURNALS
+// ==========================================
+  const {
+    data: voiceJournals,
+    error: voiceJournalError,
+  } = await supabase
+    .from("voice_journals")
+    .select("*")
+    .eq("place_id", id)
+    .eq("user_id", user.id)
+    .order("created_at", {
+      ascending: false,
+    });
+
+  if (voiceJournalError) {
+    console.error(
+      "VOICE JOURNAL ERROR:",
+      voiceJournalError
+    );
+  }
+  // ==========================================
   // SAFE ARRAYS
   // ==========================================
 
   const journalList: Journal[] = journals ?? [];
   const photoList: Photo[] = photos ?? [];
+  const voiceJournalList: VoiceJournal[] =
+    voiceJournals ?? [];
+  const voiceJournalsWithUrls = await Promise.all(
+    voiceJournalList.map(async (voice) => {
+      const { data, error } = await supabase.storage
+        .from("voice-journals")
+        .createSignedUrl(voice.storage_path, 60 * 60);
 
+      if (error) {
+        console.error(
+          "VOICE URL ERROR:",
+          error
+        );
+
+        return {
+          ...voice,
+          publicUrl: null,
+        };
+      }
+
+      return {
+        ...voice,
+        publicUrl: data.signedUrl,
+      };
+    })
+  );
   // ==========================================
   // GROUP PHOTOS BY JOURNAL
   // ==========================================
@@ -277,6 +333,67 @@ export default async function PlacePage({
             </div>
           </section>
         )}
+        {/* VOICE JOURNALS */}
+{voiceJournalsWithUrls.length > 0 && (
+  <section className="mt-20">
+    <div>
+      <p className="text-xs uppercase tracking-[0.4em] text-white/40">
+        Audio memories
+      </p>
+
+      <h2 className="mt-3 text-3xl font-light">
+        Voice Journal
+      </h2>
+    </div>
+
+    <div className="mt-8 space-y-4">
+      {voiceJournalsWithUrls.map((voice) => (
+        <div
+          key={voice.id}
+          className="rounded-3xl border border-white/10 bg-white/5 p-6"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-white/60">
+                Voice memory
+              </p>
+
+              <p className="mt-1 text-xs text-white/30">
+                {new Date(
+                  voice.created_at
+                ).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+            </div>
+
+            {voice.duration > 0 && (
+              <p className="font-mono text-xs text-white/30">
+                {Math.floor(voice.duration / 60)
+                  .toString()
+                  .padStart(2, "0")}
+                :
+                {(voice.duration % 60)
+                  .toString()
+                  .padStart(2, "0")}
+              </p>
+            )}
+          </div>
+
+          {voice.publicUrl && (
+            <audio
+              controls
+              src={voice.publicUrl}
+              className="mt-5 w-full"
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  </section>
+)}
 
         {/* JOURNALS */}
 
