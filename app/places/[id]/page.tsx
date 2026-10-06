@@ -212,7 +212,7 @@ export default async function PlacePage({
 
         {/* STATS */}
 
-        <section className="mt-12 grid grid-cols-3 gap-4">
+        <section className="mt-12 grid grid-cols-2 gap-4">
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
             <p className="text-3xl font-light">
               {journalList.length}
@@ -237,15 +237,6 @@ export default async function PlacePage({
             </p>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <p className="text-3xl font-light">
-              1
-            </p>
-
-            <p className="mt-2 text-sm text-white/40">
-              City
-            </p>
-          </div>
         </section>
 
         {/* PHOTO GALLERY */}
