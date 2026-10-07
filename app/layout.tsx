@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   title: "The World Of Mine — Personal Travel Journal",
   description:
     "A personal space for places, people, and memories around the world.",
+  icons: {
+    icon: "/globe-icon.png",
+  },
   openGraph: {
     title: "The World Of Mine — Personal Travel Journal",
     description:
@@ -23,12 +26,21 @@ export const metadata: Metadata = {
     siteName: "The World Of Mine",
     locale: "en_US",
     type: "website",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "The World Of Mine — Personal Travel Journal",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "The World Of Mine — Personal Travel Journal",
     description:
       "A personal space for places, people, and memories around the world.",
+    images: ["/og-image.png"],
   },
 };
 
