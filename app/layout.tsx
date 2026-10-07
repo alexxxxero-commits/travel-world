@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://theuniverseofmine.com"),
   title: "The World Of Mine — Personal Travel Journal",
   description:
     "A personal space for places, people, and memories around the world.",
