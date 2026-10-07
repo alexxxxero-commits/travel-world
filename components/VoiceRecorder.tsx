@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type VoiceRecorderProps = {
-  onRecordingComplete?: (file: File, duration: number) => void;
+  onRecordingComplete?: (file: File, duration: number, title: string) => void;
 };
 
 export default function VoiceRecorder({
@@ -12,6 +12,8 @@ export default function VoiceRecorder({
   const [recording, setRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [recordedFile, setRecordedFile] = useState<File | null>(null);
   const [error, setError] = useState("");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -104,10 +106,7 @@ export default function VoiceRecorder({
           }
         );
 
-        onRecordingComplete?.(
-          file,
-          finalDuration
-        );
+        setRecordedFile(file);
 
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((track) => {
@@ -167,6 +166,18 @@ export default function VoiceRecorder({
     }
   }
 
+  function saveRecording() {
+  if (!recordedFile) {
+    return;
+  }
+
+  onRecordingComplete?.(
+    recordedFile,
+    duration,
+    title.trim() || "Voice memory"
+  );
+}
+
   function deleteRecording() {
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
@@ -174,6 +185,9 @@ export default function VoiceRecorder({
 
     setAudioUrl(null);
     setDuration(0);
+    setTitle("");
+    setRecordedFile(null);
+
     chunksRef.current = [];
     mediaRecorderRef.current = null;
   }
@@ -228,11 +242,25 @@ export default function VoiceRecorder({
 
       {audioUrl && !recording && (
         <div className="mt-6">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Give this voice memory a name..."
+            className="mb-4 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-white/30"
+          />
           <audio
             controls
             src={audioUrl}
             className="w-full"
           />
+          <button
+            type="button"
+            onClick={saveRecording}
+            className="mt-4 w-full rounded-full bg-white px-6 py-4 text-sm uppercase tracking-widest text-black transition hover:bg-white/80"
+          >
+            Save Voice
+          </button>
 
           <div className="mt-3 text-xs text-white/30">
             Duration: {formatDuration(duration)}

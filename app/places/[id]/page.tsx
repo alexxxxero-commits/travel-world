@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import JournalActions from "@/components/JournalActions";
+import VoiceJournalActions from "@/components/VoiceJournalActions";
 import PhotoPreview from "@/components/PhotoPreview";
 import Link from "next/link";
 
@@ -34,6 +35,7 @@ type VoiceJournal = {
   journal_id: string;
   storage_path: string;
   duration: number;
+  title: string | null;
   created_at: string;
 };
 
@@ -332,68 +334,7 @@ export default async function PlacePage({
                 ))}
             </div>
           </section>
-        )}
-        {/* VOICE JOURNALS */}
-{voiceJournalsWithUrls.length > 0 && (
-  <section className="mt-20">
-    <div>
-      <p className="text-xs uppercase tracking-[0.4em] text-white/40">
-        Audio memories
-      </p>
-
-      <h2 className="mt-3 text-3xl font-light">
-        Voice Journal
-      </h2>
-    </div>
-
-    <div className="mt-8 space-y-4">
-      {voiceJournalsWithUrls.map((voice) => (
-        <div
-          key={voice.id}
-          className="rounded-3xl border border-white/10 bg-white/5 p-6"
-        >
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm text-white/60">
-                Voice memory
-              </p>
-
-              <p className="mt-1 text-xs text-white/30">
-                {new Date(
-                  voice.created_at
-                ).toLocaleDateString("en-US", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </p>
-            </div>
-
-            {voice.duration > 0 && (
-              <p className="font-mono text-xs text-white/30">
-                {Math.floor(voice.duration / 60)
-                  .toString()
-                  .padStart(2, "0")}
-                :
-                {(voice.duration % 60)
-                  .toString()
-                  .padStart(2, "0")}
-              </p>
-            )}
-          </div>
-
-          {voice.publicUrl && (
-            <audio
-              controls
-              src={voice.publicUrl}
-              className="mt-5 w-full"
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  </section>
-)}
+        )}        
 
         {/* JOURNALS */}
 
@@ -424,6 +365,11 @@ export default async function PlacePage({
               journalList.map((journal) => {
                 const journalPhotos =
                   photosByJournal[journal.id] ?? [];
+
+                const journalVoices =
+                  voiceJournalsWithUrls.filter(
+                    (voice) => voice.journal_id === journal.id
+                  );
 
                 return (
                   <article
@@ -488,6 +434,74 @@ export default async function PlacePage({
                     <p className="mt-6 whitespace-pre-line text-sm leading-8 text-white/60">
                       {journal.content}
                     </p>
+
+                    {/* VOICE MEMORIES */}
+
+{journalVoices.length > 0 && (
+  <div className="mt-8 border-t border-white/10 pt-6">
+    <p className="text-xs uppercase tracking-[0.3em] text-white/30">
+      Voice memories
+    </p>
+
+    <div className="mt-4 space-y-3">
+      {journalVoices.map((voice) => (
+        <div
+          key={voice.id}
+          className="rounded-2xl border border-white/10 bg-black/20 p-4"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-white/70">
+                {voice.title || "Voice memory"}
+              </p>
+
+              <p className="mt-1 text-xs text-white/30">
+                {new Date(
+                  voice.created_at
+                ).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+
+              <div className="mt-2">
+                <VoiceJournalActions
+                  voiceId={voice.id}
+                  currentTitle={
+                    voice.title || "Voice memory"
+                  }
+                />
+              </div>
+            </div>
+
+            {voice.duration > 0 && (
+              <p className="font-mono text-xs text-white/30">
+                {Math.floor(
+                  voice.duration / 60
+                )
+                  .toString()
+                  .padStart(2, "0")}
+                :
+                {(voice.duration % 60)
+                  .toString()
+                  .padStart(2, "0")}
+              </p>
+            )}
+          </div>
+
+          {voice.publicUrl && (
+            <audio
+              controls
+              src={voice.publicUrl}
+              className="mt-4 w-full"
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 
                   </article>
                 );

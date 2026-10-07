@@ -216,6 +216,9 @@ export default function AddMemory() {
 
   const [voiceDuration, setVoiceDuration] =
     useState(0);
+  
+  const [voiceTitle, setVoiceTitle] =
+  useState("");
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -1136,6 +1139,7 @@ export default function AddMemory() {
           journal_id: journal.id,
           storage_path: uploadedVoicePath,
           duration: voiceDuration,
+          title: voiceTitle,
         })
         .select()
         .single();
@@ -1231,6 +1235,7 @@ export default function AddMemory() {
     // Clear voice state
     setVoiceFile(null);
     setVoiceDuration(0);
+    setVoiceTitle("");
 
     setMessage(
       photos.length > 0 && voiceFile
@@ -1477,10 +1482,12 @@ export default function AddMemory() {
             <VoiceRecorder
               onRecordingComplete={(
                 file,
-                duration
+                duration,
+                title
               ) => {
                 setVoiceFile(file);
                 setVoiceDuration(duration);
+                setVoiceTitle(title);
               }}
             />
           </div>
