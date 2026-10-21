@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,177 +9,87 @@ export default function UserMenu() {
   const router = useRouter();
   const supabase = createClient();
 
-  const [username, setUsername] =
-    useState<string | null>(null);
-
-  const [loading, setLoading] =
-    useState(true);
+  const [username, setUsername] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
+    let requestId = 0;
 
-    async function loadUser() {
-      if (!mounted) return;
+    async function loadProfile(userId: string) {
+      const currentRequest = ++requestId;
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      try {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("id", userId)
+          .single();
 
-      if (userError) {
-        console.error(
-          "GET USER ERROR:",
-          userError
-        );
+        if (!mounted || currentRequest !== requestId) return;
 
-        if (mounted) {
+        if (error) {
+          console.error("PROFILE LOAD ERROR:", error);
           setUsername(null);
           setLoading(false);
+          return;
         }
 
-        return;
-      }
+        setUsername(profile?.username ?? null);
+        setLoading(false);
+      } catch (error) {
+        if (!mounted || currentRequest !== requestId) return;
 
-      if (!user) {
-        if (mounted) {
-          setUsername(null);
-          setLoading(false);
-        }
-
-        return;
-      }
-
-      console.log("CURRENT USER:", user);
-
-      const {
-        data: profile,
-        error: profileError,
-      } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", user.id)
-        .single();
-
-      if (profileError) {
-        console.error(
-          "PROFILE LOAD ERROR:",
-          profileError
-        );
-
-        if (mounted) {
-          setUsername(null);
-          setLoading(false);
-        }
-
-        return;
-      }
-
-      if (mounted) {
-        setUsername(
-          profile?.username ?? null
-        );
-
+        console.error("PROFILE LOAD ERROR:", error);
+        setUsername(null);
         setLoading(false);
       }
     }
 
-    async function initialize() {
-      await loadUser();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("AUTH EVENT:", event);
 
       if (!mounted) return;
 
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          console.log(
-            "AUTH EVENT:",
-            event
-          );
+      const user = session?.user;
 
-          if (!mounted) return;
-
-          if (!session?.user) {
-            setUsername(null);
-            setLoading(false);
-            return;
-          }
-
-          const {
-            data: profile,
-            error,
-          } = await supabase
-            .from("profiles")
-            .select("username")
-            .eq("id", session.user.id)
-            .single();
-
-          if (error) {
-            console.error(
-              "PROFILE LOAD ERROR:",
-              error
-            );
-
-            if (mounted) {
-              setUsername(null);
-              setLoading(false);
-            }
-
-            return;
-          }
-
-          if (mounted) {
-            setUsername(
-              profile?.username ?? null
-            );
-
-            setLoading(false);
-          }
-        }
-      );
-
-      return subscription;
-    }
-
-    let subscription:
-      | ReturnType<
-          typeof supabase.auth.onAuthStateChange
-        >["data"]["subscription"]
-      | null = null;
-
-    initialize().then((result) => {
-      if (result) {
-        subscription = result;
+      if (!user) {
+        requestId++;
+        setUsername(null);
+        setLoading(false);
+        return;
       }
+
+      setLoading(true);
+
+      // Run the profile query outside the auth callback.
+      setTimeout(() => {
+        if (mounted) {
+          void loadProfile(user.id);
+        }
+      }, 0);
     });
 
     return () => {
       mounted = false;
-
-      if (subscription) {
-        subscription.unsubscribe();
-      }
+      subscription.unsubscribe();
     };
   }, [supabase]);
 
   async function handleLogout() {
     setLoading(true);
 
-    const { error } =
-      await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
 
     if (error) {
-      console.error(
-        "LOGOUT ERROR:",
-        error
-      );
-
+      console.error("LOGOUT ERROR:", error);
       setLoading(false);
       return;
     }
 
     setUsername(null);
-
     router.push("/login");
     router.refresh();
   }
@@ -192,9 +103,7 @@ export default function UserMenu() {
       <div className="fixed right-6 top-6 z-50">
         <button
           type="button"
-          onClick={() =>
-            router.push("/login")
-          }
+          onClick={() => router.push("/login")}
           className="rounded-full border border-white/20 bg-black/60 px-5 py-2 text-sm text-white backdrop-blur transition hover:bg-white hover:text-black"
         >
           Log in

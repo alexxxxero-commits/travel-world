@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Globe from "@/components/Globe";
 import UserMenu from "@/components/UserMenu";
 import { createClient } from "@/lib/supabase/server";
@@ -221,44 +222,48 @@ export default async function Home() {
         {/* STATS */}
         <div className="flex justify-center gap-12 text-center text-sm text-white/50">
           {/* COUNTRIES */}
-          <div>
+          <Link
+            href="/collections/countries"
+            className="cursor-pointer transition hover:text-white"
+          >
             <p className="text-3xl font-light text-white">
               {countryCount}
             </p>
 
             <p className="mt-2">
-              {countryCount === 1
-                ? "Country"
-                : "Countries"}
+              {countryCount === 1 ? "Country" : "Countries"}
             </p>
-          </div>
+          </Link>
 
           {/* CITIES */}
-          <div>
+          <Link
+            href="/collections/cities"
+            className="cursor-pointer transition hover:text-white"
+          >
             <p className="text-3xl font-light text-white">
               {cityCount}
             </p>
 
             <p className="mt-2">
-              {cityCount === 1
-                ? "City"
-                : "Cities"}
+              {cityCount === 1 ? "City" : "Cities"}
             </p>
-          </div>
+          </Link>
 
           {/* MEMORIES */}
-          <div>
+          <Link
+            href="/collections/memories"
+            className="cursor-pointer transition hover:text-white"
+          >
             <p className="text-3xl font-light text-white">
               {memoryCount}
             </p>
 
             <p className="mt-2">
-              {memoryCount === 1
-                ? "Memory"
-                : "Memories"}
+              {memoryCount === 1 ? "Memory" : "Memories"}
             </p>
-          </div>
+          </Link>
         </div>
+
 
         {/* ADD MEMORY */}
         {user && (
