@@ -199,8 +199,8 @@ export default async function Home() {
  
      <div className="mx-auto flex min-h-[100svh] w-full max-w-[1800px] flex-col items-center px-4 py-8 sm:px-6 sm:py-10 lg:h-full lg:min-h-0 lg:px-10 lg:py-5">
        {/* HEADER */}
-       <header className="flex shrink-0 flex-col items-center text-center">
-         <p className="mb-3 text-xs uppercase tracking-[0.25em] text-white/50 sm:mb-4 sm:text-sm sm:tracking-[0.4em]">
+       <header className="flex w-full shrink-0 flex-col items-center pt-14 text-center sm:pt-10 lg:pt-0">
+         <p className="mb-3 max-w-full px-2 text-[10px] uppercase tracking-[0.18em] text-white/50 sm:mb-4 sm:text-sm sm:tracking-[0.4em]">
            My personal travel journal
          </p>
  
