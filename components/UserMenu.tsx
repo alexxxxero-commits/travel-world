@@ -100,7 +100,7 @@ export default function UserMenu() {
 
   if (!username) {
     return (
-      <div className="fixed right-6 top-6 z-50">
+      <div className="fixed right-3 top-3 z-50 sm:right-6 sm:top-6">
         <button
           type="button"
           onClick={() => router.push("/login")}
@@ -113,7 +113,7 @@ export default function UserMenu() {
   }
 
   return (
-    <div className="fixed right-6 top-6 z-50 flex items-center gap-3">
+    <div className="fixed right-3 top-3 z-50 flex max-w-[calc(100vw-1.5rem)] items-center gap-2 sm:right-6 sm:top-6 sm:gap-3">
       <div className="rounded-full border border-white/10 bg-white/5 px-5 py-2 text-sm text-white backdrop-blur">
         @{username}
       </div>
