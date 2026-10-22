@@ -1,15 +1,18 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
+import { useEffect, useRef, useState } from "react";
+import {
+  Canvas,
+  useFrame,
+  useThree,
+} from "@react-three/fiber";
 import {
   OrbitControls,
   Stars,
   Text,
   useTexture,
 } from "@react-three/drei";
-import { useThree } from "@react-three/fiber";
-import { useEffect } from "react";
-import { useState } from "react";
+import * as THREE from "three";
 
 type Photo = {
   id: string;
@@ -37,19 +40,125 @@ type Place = {
   journals: Journal[];
 };
 
+
 function Earth() {
-  const texture = useTexture(
-    "/textures/earth-night.jpg"
-  );
+  const texture = useTexture("/textures/earth-night.jpg");
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  useFrame(() => {
+    const material = materialRef.current;
+    if (!material) return;
+
+    // 使用真实 UTC 时间计算太阳位置
+    const now = new Date();
+    const utcHours =
+      now.getUTCHours() +
+      now.getUTCMinutes() / 60 +
+      now.getUTCSeconds() / 3600;
+
+    // 太阳直射点的近似经度
+    const sunLongitude = ((12 - utcHours) * 15) * Math.PI / 180;
+
+    // 根据一年中的日期近似计算太阳赤纬
+    const startOfYear = new Date(
+      Date.UTC(now.getUTCFullYear(), 0, 0)
+    );
+    const dayOfYear = Math.floor(
+      (now.getTime() - startOfYear.getTime()) / 86400000
+    );
+
+    const declination =
+      23.44 *
+      Math.sin((2 * Math.PI * (284 + dayOfYear)) / 365) *
+      Math.PI / 180;
+
+    // 坐标系与当前城市标记使用的经纬度约定一致
+    const sunX = Math.cos(declination) * Math.cos(sunLongitude);
+    const sunY = Math.sin(declination);
+    const sunZ = -Math.cos(declination) * Math.sin(sunLongitude);
+
+    material.uniforms.sunDirection.value.set(
+      sunX,
+      sunY,
+      sunZ
+    );
+  });
 
   return (
     <mesh>
-      <sphereGeometry
-        args={[2, 64, 64]}
-      />
+      <sphereGeometry args={[2, 96, 96]} />
 
-      <meshStandardMaterial
-        map={texture}
+      <shaderMaterial
+        ref={materialRef}
+        uniforms={{
+          map: { value: texture },
+          sunDirection: {
+            value: new THREE.Vector3(1, 0, 0),
+          },
+        }}
+        vertexShader={`
+          varying vec2 vUv;
+          varying vec3 vWorldNormal;
+
+          void main() {
+            vUv = uv;
+            vWorldNormal = normalize(
+              mat3(modelMatrix) * normal
+            );
+
+            gl_Position = projectionMatrix
+              * modelViewMatrix
+              * vec4(position, 1.0);
+          }
+        `}
+        fragmentShader={`
+  uniform sampler2D map;
+  uniform vec3 sunDirection;
+
+  varying vec2 vUv;
+  varying vec3 vWorldNormal;
+
+  void main() {
+    vec3 color = texture2D(map, vUv).rgb;
+
+    float sunFacing = dot(
+      normalize(vWorldNormal),
+      normalize(sunDirection)
+    );
+
+    // 更清晰的昼夜分界，保留自然过渡
+    float daylight = smoothstep(
+      -0.08,
+      0.08,
+      sunFacing
+    );
+
+    // 夜面深邃，白昼自然，不额外过曝
+    float brightness = mix(
+      0.25,
+      0.95,
+      daylight
+    );
+
+    // 晨昏光晕：集中在昼夜交界处
+    float twilight = exp(
+      -pow(sunFacing / 0.055, 2.0)
+    );
+
+    // 只增加中性柔光，不覆盖蓝色滤镜
+    brightness += twilight * 0.12;
+
+    gl_FragColor = vec4(
+      color * brightness,
+      1.0
+    );
+
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`}
       />
     </mesh>
   );
@@ -84,22 +193,16 @@ function ZoomLevel({
   return null;
 }
 
-
 function PlaceMarker({
   latitude,
   longitude,
-  city,
-  showLabel,
   onClick,
 }: {
   latitude: number;
   longitude: number;
-  city: string;
-  showLabel: boolean;
   onClick: () => void;
 }) {
-  const radius = 2.05;
-
+  const radius = 2.025;
   const phi = (90 - latitude) * (Math.PI / 180);
   const theta = (longitude + 180) * (Math.PI / 180);
 
@@ -109,9 +212,37 @@ function PlaceMarker({
 
   return (
     <group position={[x, y, z]}>
+      {/* 只负责点击，不负责显示 */}
       <mesh onClick={onClick}>
-        <sphereGeometry args={[0.06, 16, 16]} />
-        <meshBasicMaterial color="#ffffff" />
+        <sphereGeometry args={[0.12, 8, 8]} />
+        <meshBasicMaterial
+          color="black"
+          transparent
+          opacity={0}
+          depthWrite={false}
+          colorWrite={false}
+        />
+      </mesh>
+
+      {/* 微小的城市星点，不参与点击 */}
+      <mesh raycast={() => null}>
+        <sphereGeometry args={[0.018, 12, 12]} />
+        <meshBasicMaterial
+          color="#e5efff"
+          toneMapped={false}
+        />
+      </mesh>
+
+      {/* 非常淡的光晕 */}
+      <mesh raycast={() => null}>
+        <sphereGeometry args={[0.045, 12, 12]} />
+        <meshBasicMaterial
+          color="#a8cfff"
+          transparent
+          opacity={0.12}
+          depthWrite={false}
+          toneMapped={false}
+        />
       </mesh>
     </group>
   );
@@ -152,15 +283,16 @@ export default function Globe({
           position: [0, 0, 6],
           fov: 45,
         }}
+        style={{ width: "100%", height: "100%" }}
       >
 
         <ambientLight
-          intensity={0.35}
+          intensity={1.1}
         />
 
         <directionalLight
           position={[5, 3, 5]}
-          intensity={2.5}
+          intensity={1.5}
         />
 
         <Stars
@@ -183,8 +315,6 @@ export default function Globe({
               key={place.id}
               latitude={place.latitude}
               longitude={place.longitude}
-              city={place.city}
-              showLabel={showLabels}
               onClick={() => setSelectedPlace(place.id)}
             />
           ))}
