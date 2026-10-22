@@ -192,89 +192,82 @@ export default async function Home() {
   // 9. HOME PAGE
   // ==========================================
 
-  return (
-    <main className="min-h-screen bg-black text-white">
-      {/* USER MENU */}
-      <UserMenu />
+  
+ return (
+   <main className="min-h-[100svh] bg-black text-white lg:h-[100svh] lg:overflow-hidden">
+     <UserMenu />
+ 
+     <div className="mx-auto flex min-h-[100svh] w-full max-w-[1800px] flex-col items-center px-4 py-8 sm:px-6 sm:py-10 lg:h-full lg:min-h-0 lg:px-10 lg:py-5">
+       {/* HEADER */}
+       <header className="flex shrink-0 flex-col items-center text-center">
+         <p className="mb-3 text-xs uppercase tracking-[0.25em] text-white/50 sm:mb-4 sm:text-sm sm:tracking-[0.4em]">
+           My personal travel journal
+         </p>
+ 
+         <h1 className="text-4xl font-light tracking-tight sm:text-6xl lg:text-7xl xl:text-8xl">
+           The World Of Mine
+         </h1>
+ 
+         <p className="mt-3 max-w-xl px-2 text-sm text-white/60 sm:mt-4 sm:text-base lg:text-lg">
+           A safe space of places, people and memories.
+         </p>
+       </header>
+ 
+       {/* GLOBE */}
+       <div className="my-4 flex w-full flex-1 justify-center sm:my-6 lg:my-1 lg:min-h-0">
+         <Globe places={placesWithJournals} />
+       </div>
+ 
+       {/* STATS */}
+       <div className="flex w-full shrink-0 justify-center gap-8 text-center text-sm text-white/50 sm:gap-12 lg:gap-16">
+         <Link
+           href="/collections/countries"
+           className="transition hover:text-white"
+         >
+           <p className="text-2xl font-light text-white sm:text-3xl">
+             {countryCount}
+           </p>
+           <p className="mt-2">
+             {countryCount === 1 ? "Country" : "Countries"}
+           </p>
+         </Link>
+ 
+         <Link
+           href="/collections/cities"
+           className="transition hover:text-white"
+         >
+           <p className="text-2xl font-light text-white sm:text-3xl">
+             {cityCount}
+           </p>
+           <p className="mt-2">
+             {cityCount === 1 ? "City" : "Cities"}
+           </p>
+         </Link>
+ 
+         <Link
+           href="/collections/memories"
+           className="transition hover:text-white"
+         >
+           <p className="text-2xl font-light text-white sm:text-3xl">
+             {memoryCount}
+           </p>
+           <p className="mt-2">
+             {memoryCount === 1 ? "Memory" : "Memories"}
+           </p>
+         </Link>
+       </div>
 
-      {/* MAIN CONTENT */}
-      <div className="flex min-h-screen flex-col items-center px-6 py-20">
-        {/* HEADER */}
-        <p className="mb-6 text-sm uppercase tracking-[0.4em] text-white/50">
-          My personal travel journal
-        </p>
+       {/* ADD MEMORY */}
+       {user && (
+         <a
+           href="/add"
+           className="mt-8 shrink-0 rounded-full border border-white/20 px-7 py-3 text-xs uppercase tracking-widest transition hover:bg-white hover:text-black sm:mt-10 sm:text-sm lg:mt-6"
+         >
+           Add Memory
+         </a>
+       )}
+     </div>
+   </main>
+ );
 
-        <h1 className="text-center text-7xl font-light tracking-tight md:text-9xl">
-          The World Of Mine
-        </h1>
-
-        <p className="mt-6 text-center text-lg text-white/60">
-          A safe space of places, people and memories.
-        </p>
-
-        {/* GLOBE */}
-        <div className="my-10 flex w-full justify-center">
-          <Globe
-            places={placesWithJournals}
-          />
-        </div>
-
-        {/* STATS */}
-        <div className="flex justify-center gap-12 text-center text-sm text-white/50">
-          {/* COUNTRIES */}
-          <Link
-            href="/collections/countries"
-            className="cursor-pointer transition hover:text-white"
-          >
-            <p className="text-3xl font-light text-white">
-              {countryCount}
-            </p>
-
-            <p className="mt-2">
-              {countryCount === 1 ? "Country" : "Countries"}
-            </p>
-          </Link>
-
-          {/* CITIES */}
-          <Link
-            href="/collections/cities"
-            className="cursor-pointer transition hover:text-white"
-          >
-            <p className="text-3xl font-light text-white">
-              {cityCount}
-            </p>
-
-            <p className="mt-2">
-              {cityCount === 1 ? "City" : "Cities"}
-            </p>
-          </Link>
-
-          {/* MEMORIES */}
-          <Link
-            href="/collections/memories"
-            className="cursor-pointer transition hover:text-white"
-          >
-            <p className="text-3xl font-light text-white">
-              {memoryCount}
-            </p>
-
-            <p className="mt-2">
-              {memoryCount === 1 ? "Memory" : "Memories"}
-            </p>
-          </Link>
-        </div>
-
-
-        {/* ADD MEMORY */}
-        {user && (
-          <a
-            href="/add"
-            className="mt-16 rounded-full border border-white/20 px-8 py-3 text-sm uppercase tracking-widest transition hover:bg-white hover:text-black"
-          >
-            Add Memory
-          </a>
-        )}
-      </div>
-    </main>
-  );
 }

@@ -4,8 +4,11 @@ import { Canvas } from "@react-three/fiber";
 import {
   OrbitControls,
   Stars,
+  Text,
   useTexture,
 } from "@react-three/drei";
+import { useThree } from "@react-three/fiber";
+import { useEffect } from "react";
 import { useState } from "react";
 
 type Photo = {
@@ -52,51 +55,65 @@ function Earth() {
   );
 }
 
+function ZoomLevel({
+  onZoomChange,
+}: {
+  onZoomChange: (zoomedIn: boolean) => void;
+}) {
+  const { camera } = useThree();
+
+  useEffect(() => {
+    let previousZoomedIn: boolean | null = null;
+
+    const updateZoom = () => {
+      const zoomedIn = camera.position.length() < 5.2;
+
+      if (zoomedIn !== previousZoomedIn) {
+        previousZoomedIn = zoomedIn;
+        onZoomChange(zoomedIn);
+      }
+    };
+
+    updateZoom();
+
+    const interval = window.setInterval(updateZoom, 100);
+
+    return () => window.clearInterval(interval);
+  }, [camera, onZoomChange]);
+
+  return null;
+}
+
+
 function PlaceMarker({
   latitude,
   longitude,
+  city,
+  showLabel,
   onClick,
 }: {
   latitude: number;
   longitude: number;
+  city: string;
+  showLabel: boolean;
   onClick: () => void;
 }) {
   const radius = 2.05;
 
-  const phi =
-    (90 - latitude) *
-    (Math.PI / 180);
+  const phi = (90 - latitude) * (Math.PI / 180);
+  const theta = (longitude + 180) * (Math.PI / 180);
 
-  const theta =
-    (longitude + 180) *
-    (Math.PI / 180);
-
-  const x =
-    -radius *
-    Math.sin(phi) *
-    Math.cos(theta);
-
-  const y =
-    radius * Math.cos(phi);
-
-  const z =
-    radius *
-    Math.sin(phi) *
-    Math.sin(theta);
+  const x = -radius * Math.sin(phi) * Math.cos(theta);
+  const y = radius * Math.cos(phi);
+  const z = radius * Math.sin(phi) * Math.sin(theta);
 
   return (
-    <mesh
-      position={[x, y, z]}
-      onClick={onClick}
-    >
-      <sphereGeometry
-        args={[0.06, 32, 32]}
-      />
-
-      <meshBasicMaterial
-        color="#ffffff"
-      />
-    </mesh>
+    <group position={[x, y, z]}>
+      <mesh onClick={onClick}>
+        <sphereGeometry args={[0.06, 16, 16]} />
+        <meshBasicMaterial color="#ffffff" />
+      </mesh>
+    </group>
   );
 }
 
@@ -109,6 +126,8 @@ export default function Globe({
     selectedPlace,
     setSelectedPlace,
   ] = useState<string | null>(null);
+  
+  const [showLabels, setShowLabels] = useState(false);
 
   const currentPlace =
     places.find(
@@ -126,7 +145,7 @@ export default function Globe({
     );
 
   return (
-    <div className="relative h-[600px] w-full">
+    <div className="relative h-[55svh] min-h-[360px] max-h-[620px] w-full lg:h-full lg:min-h-0 lg:max-h-none">
 
       <Canvas
         camera={{
@@ -153,6 +172,8 @@ export default function Globe({
           fade
         />
 
+        <ZoomLevel onZoomChange={setShowLabels} />
+
         <group>
 
           <Earth />
@@ -162,18 +183,20 @@ export default function Globe({
               key={place.id}
               latitude={place.latitude}
               longitude={place.longitude}
-              onClick={() =>
-                setSelectedPlace(
-                  place.id
-                )
-              }
+              city={place.city}
+              showLabel={showLabels}
+              onClick={() => setSelectedPlace(place.id)}
             />
           ))}
 
         </group>
 
         <OrbitControls
-          enableZoom={false}
+          enableZoom={true}
+          minDistance={2.8}
+          maxDistance={10}
+          enableDamping
+          dampingFactor={0.05}
           autoRotate
           autoRotateSpeed={0.5}
         />
