@@ -142,7 +142,7 @@ export default function UserMenu() {
 
       <button
         type="button"
-        onClick={() => router.push("/people")}
+        onClick={() => router.push("/friend-requests")}
         className="flex items-center gap-2 rounded-full border border-white/10 bg-black/70 px-3 py-2 text-xs text-white/80 backdrop-blur transition hover:bg-white hover:text-black sm:px-4 sm:text-sm"
       >
         Friend Requests
